@@ -1,0 +1,9 @@
+/target/
+**/__pycache__/
+*.py[cod]
+/python_bridge/cache/f1_fastf1_cache/
+.env
+.env.*
+.venv/
+graphify-out/
+strix_runs/
