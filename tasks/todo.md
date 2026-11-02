@@ -1,6 +1,6 @@
 # Sector Line implementation tasks
 
-Status: T01-T02 completed; T03-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
+Status: T01-T03 completed; T04-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
 
 ## T01: Establish real-data and performance baselines
 
@@ -40,7 +40,7 @@ Status: T01-T02 completed; T03-T24 remain planned. Scope confirmed: free histori
 
 ## T03: Introduce the typed observation contract
 
-- [ ] Complete T03.
+- [x] Complete T03.
 
 **Dependencies:** T01,T02. **Scope:** M (at most five likely files).
 
@@ -48,17 +48,19 @@ Status: T01-T02 completed; T03-T24 remain planned. Scope confirmed: free histori
 
 **Acceptance criteria:**
 
-- [ ] Model session/driver IDs, units, observation and availability times, quality, optional values and session capabilities.
-- [ ] Represent brake on/off and unknown DRS codes correctly; preserve numeric gaps and lapped states rather than display strings.
-- [ ] A legacy-demo adapter preserves compatibility without allowing generated fields into recorded mode.
+- [x] Model session/driver IDs, units, observation and availability times, quality, optional values and session capabilities.
+- [x] Represent brake on/off and unknown DRS codes correctly; preserve numeric gaps and lapped states rather than display strings.
+- [x] A legacy-demo adapter preserves compatibility without allowing generated fields into recorded mode.
 
 **Verification:** cargo test -p sectorline --locked --test observation_contract; malformed, unknown-code and missing-versus-zero cases.
 
 ### Checkpoint after T03
 
-- [ ] Focused tests and build pass; exercise the current end-to-end slice.
-- [ ] Record correctness/performance/visual evidence appropriate to this slice.
-- [ ] Review the milestone against its exit gate before expanding scope.
+- [x] Focused tests and build pass; exercise the current end-to-end slice.
+- [x] Record correctness/performance/visual evidence appropriate to this slice.
+- [x] Review the milestone against its exit gate before expanding scope.
+
+**Evidence:** [Observation contract](../docs/observation-contract.md). Twelve focused contract tests, all 20 Rust tests, three Python tests, release build and headless demo pass. Full demo-cache adaptation preserves generated provenance; recorded construction/JSON reject it. No UI or render-path change; existing workspace lint debt remains explicit. M0 exit gate reviewed and met.
 
 ## T04: Build the completed-session catalogue
 

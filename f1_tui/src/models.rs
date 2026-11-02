@@ -1,3 +1,5 @@
+//! Legacy generated-demo display format. Recorded input must use the validated
+//! contracts in `crate::domain`, not these string-oriented presentation models.
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 

@@ -1,4 +1,5 @@
 pub mod app;
+pub mod domain;
 pub mod live;
 pub mod models;
 pub mod stream;
