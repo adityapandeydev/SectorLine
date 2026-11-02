@@ -1,6 +1,6 @@
 # Sector Line implementation tasks
 
-Status: T01 completed; T02-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
+Status: T01-T02 completed; T03-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
 
 ## T01: Establish real-data and performance baselines
 
@@ -22,7 +22,7 @@ Status: T01 completed; T02-T24 remain planned. Scope confirmed: free historical 
 
 ## T02: Make current modes honest
 
-- [ ] Complete T02.
+- [x] Complete T02.
 
 **Dependencies:** T01. **Scope:** M (at most five likely files).
 
@@ -30,11 +30,13 @@ Status: T01 completed; T02-T24 remain planned. Scope confirmed: free historical 
 
 **Acceptance criteria:**
 
-- [ ] Generated cached playback is explicitly Demo in entrypoints, header and help.
-- [ ] Remove or disable the misleading live route until actual ingestion exists; no metadata-only live badge.
-- [ ] Existing demo and session selection still work; no broad visual redesign in this slice.
+- [x] Generated cached playback is explicitly Demo in entrypoints, header and help.
+- [x] Remove or disable the misleading live route until actual ingestion exists; no metadata-only live badge.
+- [x] Existing demo and session selection still work; no broad visual redesign in this slice.
 
 **Verification:** cargo test -p sectorline mode; cargo run --locked -p sectorline -- --demo; inspect help/header.
+
+**Evidence:** Six offline Rust mode regressions, three Python bridge regressions, and the generated headless demo pass. Removed the misleading native generator; disabled live API/CLI/bridge entrypoints before network/cache activity. UI changes are labels only.
 
 ## T03: Introduce the typed observation contract
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-F1 Telemetry Extraction & Normalization Bridge
-Extracts, formats, and caches authentic Formula 1 session telemetry for the Rust Sector Line.
-Pulls real driver rosters, real sector splits, real speed traps, and authentic GPS track layouts.
-Supports both FastF1 high-precision extraction and OpenF1 real-time live race streaming.
+Sector Line generated demo bridge.
+Historical metadata and circuit coordinates may be sourced from FastF1.
+Car movement, telemetry and other display values are generated or approximated.
+Produces generated demo frames from historical metadata; it does not record or stream a race.
 """
 
 import os
@@ -11,12 +11,10 @@ import sys
 import json
 import math
 import argparse
-import urllib.request
 from typing import Dict, List, Any, Optional
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 FF1_CACHE = os.path.join(CACHE_DIR, "f1_fastf1_cache")
-os.makedirs(FF1_CACHE, exist_ok=True)
 
 CIRCUIT_CORNER_CATALOG: Dict[str, Dict[int, str]] = {
     "silverstone": {
@@ -72,6 +70,7 @@ def extract_circuit_with_fastf1(year: int, gp: str, session_type: str = "R") -> 
         import numpy as np
         import pandas as pd
 
+        os.makedirs(FF1_CACHE, exist_ok=True)
         fastf1.Cache.enable_cache(FF1_CACHE)
         print(f"-> Loading FastF1 session: {year} {gp} ({session_type})...")
         session = fastf1.get_session(year, gp, session_type)
@@ -418,243 +417,21 @@ def generate_telemetry_stream(
 
     return stream
 
-def fetch_json(url: str, timeout: int = 8) -> Any:
-    req = urllib.request.Request(url, headers={"User-Agent": "F1Suite/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
 def extract_live_from_openf1(output_dir: str) -> bool:
-    """
-    Connects to OpenF1 real-time REST API to ingest the active / latest live championship session:
-    - Queries latest live session: year, session_name, circuit, country, session_key
-    - Pulls authentic live driver roster (current active drivers, new teams, current numbers, real colors)
-    - Pulls authentic live laps & sector splits (S1, S2, S3, ST speed, I1 speed)
-    - Pulls authentic live positions and intervals
-    - Generates authentic track map & radar telemetry for the active circuit
-    """
-    print("==========================================================================")
-    print("          OPENF1 REAL-TIME LIVE TELEMETRY INGESTION ENGINE                ")
-    print("==========================================================================")
-    print("-> Probing OpenF1 for active / latest live championship session...")
+    """Live ingestion is unavailable; reject without network or cache writes."""
+    raise RuntimeError("Live access is unavailable. This bridge generates demos only.")
 
-    try:
-        sessions = fetch_json("https://api.openf1.org/v1/sessions?session_key=latest")
-        if not sessions:
-            raise RuntimeError("No active session returned from OpenF1 API.")
-        s = sessions[0]
-        skey = s["session_key"]
-        year = s.get("year", 2026)
-        circuit_short = s.get("circuit_short_name", "Baku")
-        country = s.get("country_name", "Azerbaijan")
-        session_name = s.get("session_name", "Race")
-        event_name = f"{country} Grand Prix {year}"
-        circuit_name = f"{circuit_short} Circuit"
-        print(f"-> Active Live Session: {event_name} - {session_name} (Session Key: {skey})")
-        print(f"-> Circuit: {circuit_name} ({country})")
-
-        # 1. Fetch Live Drivers Roster
-        print("-> Fetching live driver roster from OpenF1...")
-        raw_drivers = fetch_json(f"https://api.openf1.org/v1/drivers?session_key={skey}")
-        drivers_roster = []
-        for d in raw_drivers:
-            dnum = d.get("driver_number")
-            if not dnum:
-                continue
-            code = d.get("name_acronym") or f"D{dnum}"
-            name = d.get("full_name") or f"Driver {dnum}"
-            team = d.get("team_name") or "Formula 1 Team"
-            color = str(d.get("team_colour") or "FFFFFF")
-            if not color.startswith("#"):
-                color = "#" + color
-
-            drivers_roster.append({
-                "number": dnum,
-                "code": code,
-                "name": name,
-                "team": team,
-                "color": color,
-                "base_pace": 105.0
-            })
-        print(f"   [OK] Loaded {len(drivers_roster)} active drivers for {year} grid")
-
-        # 2. Fetch Live Positions
-        print("-> Fetching live driver positions...")
-        pos_map = {}
-        try:
-            raw_pos = fetch_json(f"https://api.openf1.org/v1/position?session_key={skey}")
-            for p in raw_pos:
-                pos_map[p["driver_number"]] = p.get("position", len(pos_map) + 1)
-        except Exception as e:
-            print(f"   [Notice] Position query: {e}. Defaulting to roster order.")
-
-        # 3. Compute Live Intervals & Positions
-        print("-> Calculating live classification order and interval gaps...")
-        gap_leader_map = {}
-        interval_map = {}
-
-        # 4. Fetch Live Laps & Speeds
-        print("-> Fetching live lap telemetry, sector splits and speed traps...")
-        lap_meta = {}
-        all_s1, all_s2, all_s3 = [], [], []
-        max_st, max_fl, max_i1 = 336.0, 320.0, 215.0
-        try:
-            raw_laps = fetch_json(f"https://api.openf1.org/v1/laps?session_key={skey}&lap_number=1")
-            for lap in raw_laps:
-                dnum = lap.get("driver_number")
-                s1 = lap.get("duration_sector_1")
-                s2 = lap.get("duration_sector_2")
-                s3 = lap.get("duration_sector_3")
-                st = lap.get("st_speed")
-                i1 = lap.get("i1_speed")
-                i2 = lap.get("i2_speed")
-
-                if s1: all_s1.append(float(s1))
-                if s2: all_s2.append(float(s2))
-                if s3: all_s3.append(float(s3))
-                if st and float(st) > max_st: max_st = float(st)
-                if i2 and float(i2) > max_fl: max_fl = float(i2)
-                if i1 and float(i1) > max_i1: max_i1 = float(i1)
-
-                lap_meta[dnum] = {
-                    "s1": float(s1) if s1 else 38.2,
-                    "s2": float(s2) if s2 else 43.1,
-                    "s3": float(s3) if s3 else 25.4,
-                    "st": float(st) if st else 320.0
-                }
-        except Exception as e:
-            print(f"   [Notice] Laps query: {e}")
-
-        best_s1 = min(all_s1) if all_s1 else 38.0
-        best_s2 = min(all_s2) if all_s2 else 43.0
-        best_s3 = min(all_s3) if all_s3 else 25.0
-        print(f"   [OK] Live Best Sectors: S1={best_s1:.3f}s, S2={best_s2:.3f}s, S3={best_s3:.3f}s")
-        print(f"   [OK] Live Speed Trap Record: {max_st:.1f} km/h (Finish Line: {max_fl:.1f} km/h)")
-
-        # Build driver pace dictionary
-        driver_pace = {}
-        for idx, d in enumerate(drivers_roster):
-            dnum = d["number"]
-            code = d["code"]
-            pos = pos_map.get(dnum, idx + 1)
-            l_info = lap_meta.get(dnum, {})
-            gap_lead = 0.0 if pos == 1 else (pos - 1) * 2.145
-            gap_int = 0.0 if pos == 1 else (2.145 if pos == 2 else 1.250 + (pos % 3) * 0.450)
-            driver_pace[code] = {
-                "pos": pos,
-                "s1": l_info.get("s1", 38.2),
-                "s2": l_info.get("s2", 43.1),
-                "s3": l_info.get("s3", 25.4),
-                "st": l_info.get("st", 320.0),
-                "compound": "MEDIUM" if pos <= 5 else "HARD",
-                "tyre_age": 8 + pos % 12,
-                "gap_leader": gap_lead,
-                "interval": gap_int,
-            }
-
-        # 5. Track Layout Geometry
-        track_layout_path = os.path.join(output_dir, "track_layout.json")
-        pts, corners = [], []
-        track_len = 6003.0
-        if os.path.exists(track_layout_path):
-            try:
-                with open(track_layout_path, "r") as f:
-                    saved = json.load(f)
-                    pts = saved.get("points", [])
-                    corners = saved.get("corners", [])
-            except Exception:
-                pass
-
-        if not pts:
-            try:
-                circuit_geo = extract_circuit_with_fastf1(2024, circuit_short, "R")
-                if circuit_geo:
-                    pts = circuit_geo["points"]
-                    corners = circuit_geo["corners"]
-                    track_len = circuit_geo["track_length_meters"]
-            except Exception:
-                pass
-
-        if not pts:
-            pts = [{"x": 50.0, "y": 50.0, "dist_pct": 0.0}]
-            corners = []
-            track_len = 6003.0
-
-        # Dynamic Speed Traps for this circuit
-        speed_traps = [
-            {"name": f"ST Speed Trap ({circuit_short})", "distance_pct": 0.94, "record_kmh": round(max_st, 1)},
-            {"name": "Finish Line", "distance_pct": 0.99, "record_kmh": round(max_fl, 1)},
-            {"name": "Intermediate 1", "distance_pct": 0.32, "record_kmh": round(max_i1, 1)}
-        ]
-
-        # 6. Save Session Info
-        session_info = {
-            "event_name": event_name,
-            "circuit_name": circuit_name,
-            "session_type": session_name,
-            "total_laps": 51,
-            "track_length_meters": track_len,
-            "air_temp_c": 26.8,
-            "track_temp_c": 41.5,
-            "humidity_pct": 42.0,
-            "status": "GREEN FLAG",
-            "drs_zones": [
-                {"name": "Main Straight", "start_pct": 0.68, "end_pct": 0.96},
-                {"name": "Sector 1 Straight", "start_pct": 0.12, "end_pct": 0.22},
-            ],
-            "speed_traps": speed_traps
-        }
-        with open(os.path.join(output_dir, "session_info.json"), "w") as f:
-            json.dump(session_info, f, indent=2)
-
-        # 7. Save Track Layout
-        track_layout = {
-            "circuit": circuit_name,
-            "points": pts,
-            "corners": corners
-        }
-        with open(os.path.join(output_dir, "track_layout.json"), "w") as f:
-            json.dump(track_layout, f, indent=2)
-
-        # 8. Save Drivers
-        with open(os.path.join(output_dir, "drivers.json"), "w") as f:
-            json.dump(drivers_roster, f, indent=2)
-
-        # 9. Generate Telemetry Stream with Live Data
-        telemetry_stream = generate_telemetry_stream(
-            pts, corners, drivers_roster, driver_pace,
-            best_s1=best_s1,
-            best_s2=best_s2,
-            best_s3=best_s3,
-            track_length_m=track_len,
-            duration_seconds=120,
-            fps=5
-        )
-        with open(os.path.join(output_dir, "telemetry_stream.json"), "w") as f:
-            json.dump(telemetry_stream, f)
-
-        print("\n-> [SUCCESS] Live Session Ingested Successfully:")
-        print(f"   [OK] Session:       {event_name} - {session_name}")
-        print(f"   [OK] Live Grid:     {len(drivers_roster)} active drivers (including Audi, Cadillac, etc.)")
-        print(f"   [OK] Live Map:      {circuit_name} ({len(pts)} vertices)")
-        print(f"   [OK] Live Traps:    ST {max_st:.1f} km/h, FL {max_fl:.1f} km/h")
-        print("==========================================================================")
-        return True
-    except Exception as e:
-        print(f"-> [ERROR] OpenF1 Live Ingestion failed: {e}")
-        return False
 
 def export_f1_cache(output_dir: str, year: int = 2026, gp: str = "Baku", session_type: str = "R", live_mode: bool = False):
     """Exports all telemetry artifacts into the target directory for Sector Line."""
+    if live_mode or gp.lower() == "live":
+        raise RuntimeError("Live access is unavailable. This bridge generates demos only.")
     os.makedirs(output_dir, exist_ok=True)
     print("==========================================================================")
-    print("       F1 TELEMETRY EXTRACTION BRIDGE (FastF1 + OpenF1 Live Stream)       ")
+    print("       SECTOR LINE GENERATED DEMO BRIDGE (historical metadata)       ")
     print("==========================================================================")
     print(f"Target GP: {year} {gp} [{session_type}] | Live Mode: {live_mode}")
     print(f"Destination Cache: {output_dir}")
-
-    if live_mode or gp.lower() == "live":
-        if extract_live_from_openf1(output_dir):
-            return
 
     circuit_data = extract_circuit_with_fastf1(year, gp, session_type)
     if circuit_data is None:
@@ -662,10 +439,7 @@ def export_f1_cache(output_dir: str, year: int = 2026, gp: str = "Baku", session
         circuit_data = extract_circuit_with_fastf1(2024, gp, session_type)
 
     if circuit_data is None:
-        print(f"-> Falling back to live OpenF1 ingestion for {gp}...")
-        if extract_live_from_openf1(output_dir):
-            return
-        return
+        raise RuntimeError("Historical metadata extraction failed; no demo was generated.")
 
     pts = circuit_data["points"]
     corners = circuit_data["corners"]
@@ -730,14 +504,17 @@ def export_f1_cache(output_dir: str, year: int = 2026, gp: str = "Baku", session
     print("==========================================================================")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="F1 Telemetry Extraction Bridge (FastF1 + OpenF1 Live)")
+    parser = argparse.ArgumentParser(description="Sector Line generated demo bridge using historical metadata")
     parser.add_argument("--gp", default="Baku", help="Grand Prix name (e.g. Baku, Monza, Spa, Silverstone, Monaco)")
     parser.add_argument("--year", type=int, default=2026, help="Championship year (e.g. 2026, 2024, 2023)")
     parser.add_argument("--session", default="R", help="Session code: R (Race), Q (Qualifying), FP1, FP2, FP3")
-    parser.add_argument("--live", action="store_true", help="Connect to OpenF1 real-time live timing stream")
+    parser.add_argument("--live", action="store_true", help="Unavailable: live ingestion is not implemented")
     parser.add_argument("--output", default=CACHE_DIR, help="Destination cache directory")
     args = parser.parse_args()
 
+    if args.live or args.gp.lower() == "live":
+        parser.error("Live access is unavailable. This bridge generates demos only.")
+    print("DEMO: generated car movement and telemetry, not observed replay.")
     export_f1_cache(
         output_dir=args.output,
         year=args.year,

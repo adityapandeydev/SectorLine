@@ -34,25 +34,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("==========================================================================");
-        println!("       F1 RACE CONTROL COMMAND CENTER & LIVE TELEMETRY TELEPRINTER        ");
-        println!("==========================================================================");
-        println!("USAGE:");
-        println!("  cargo run --release -p sectorline -- [OPTIONS]\n");
-        println!("OPTIONS:");
-        println!("  --live             Connect natively to OpenF1 real-time live timing stream");
-        println!("  --gp <NAME>        Select Grand Prix (e.g. Silverstone, Monza, Spa, Monaco)");
-        println!("  --year <YYYY>      Championship season year (default: 2024 / 2023)");
-        println!("  --demo             Run 20-frame headless playback verification");
-        println!("  --help, -h         Show this help message\n");
-        println!("EXAMPLES:");
-        println!("  cargo run --release -p sectorline -- --live");
-        println!("  cargo run --release -p sectorline -- --gp monza");
-        println!("  cargo run --release -p sectorline -- --gp spa --year 2024");
+        println!("Sector Line - generated race demo");
+        println!("Current playback is generated, not observed telemetry or faithful historical replay.");
+        println!("Usage: sectorline [--demo] [--gp NAME] [--year YYYY]");
+        println!("  --demo, --headless  Run 20 generated frames without opening the TUI");
+        println!("  --gp NAME           Generate a demo using historical session metadata (Python required)");
+        println!("  --year YYYY         Historical metadata year (default: 2026)");
+        println!("  --help, -h          Show help");
+        println!("Live access is unavailable; --live and --gp live are disabled.");
+        println!("Without options, open the generated demo session selector.");
         return Ok(());
     }
 
-    let is_live_mode = args.iter().any(|a| a == "--live");
+    if args.iter().any(|a| a == "--live" || a.eq_ignore_ascii_case("--gp=live")) {
+        return Err(sectorline::live::LIVE_UNAVAILABLE.into());
+    }
     let is_demo_mode = args.iter().any(|a| a == "--demo" || a == "--headless");
 
     // Parse --gp and --year arguments
@@ -72,26 +68,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         i += 1;
     }
 
-    // In live mode without explicit --gp override, connect directly to OpenF1 live stream
-    if is_live_mode && target_gp.is_none() {
-        target_gp = Some("LIVE".to_string());
+    if target_gp.as_deref().is_some_and(|gp| gp.eq_ignore_ascii_case("live")) {
+        return Err(sectorline::live::LIVE_UNAVAILABLE.into());
     }
 
-    println!("==========================================================================");
-    println!("       F1 RACE CONTROL COMMAND CENTER & LIVE TELEMETRY TELEPRINTER        ");
-    println!("==========================================================================");
-
-    let stream = if is_live_mode || target_gp.as_deref() == Some("LIVE") {
-        println!("Connecting natively to OpenF1 real-time telemetry API (100% Pure Rust, Zero Python)...");
-        sectorline::live::LiveTelemetryClient::fetch_live_stream_natively(&cache_dir)?
-    } else if let Some(ref gp) = target_gp {
+    println!("Sector Line - DEMO | Generated car movement and telemetry; not observed replay.");
+    let stream = if let Some(ref gp) = target_gp {
         if let Some(s) = sectorline::live::LiveTelemetryClient::ensure_circuit_ready(&cache_dir, gp, target_year, "R")? {
             s
         } else {
             TelemetryStream::load_from_dir(&cache_dir)?
         }
     } else {
-        println!("Loading Grand Prix Telemetry Datasets from: {:?}...", cache_dir);
+        println!("Loading generated demo cache from: {:?}", cache_dir);
         TelemetryStream::load_from_dir(&cache_dir)?
     };
 
@@ -103,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         stream.frames.len()
     );
 
-    let start_with_modal = !is_demo_mode && target_gp.is_none() && !is_live_mode;
+    let start_with_modal = !is_demo_mode && target_gp.is_none();
     let mut app = App::new(stream, start_with_modal);
 
     // Headless / Demo Mode for non-interactive environments and CI/CD validation
@@ -154,7 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let area = sectorline::ui::centered_rect(60, 20, f.area());
                                 f.render_widget(ratatui::widgets::Clear, area);
                                 let p = ratatui::widgets::Paragraph::new(format!(
-                                    "\n  Loading {}...\n  Preparing authentic circuit telemetry & driver roster...",
+                                    "\n  Loading {}...\n  Preparing generated demo frames and session metadata...",
                                     opt.title
                                 ))
                                 .block(
@@ -167,25 +156,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 f.render_widget(p, area);
                             })?;
 
-                            if opt.is_live || opt.gp_key.eq_ignore_ascii_case("live") {
-                                if let Ok(new_stream) = sectorline::live::LiveTelemetryClient::fetch_live_stream_natively(&cache_dir) {
+                            if let Ok(opt_stream) = sectorline::live::LiveTelemetryClient::ensure_circuit_ready(
+                                &cache_dir, &opt.gp_key, opt.year, &opt.session_type,
+                            ) {
+                                if let Some(s) = opt_stream {
+                                    app.stream = s;
+                                } else if let Ok(new_stream) = TelemetryStream::load_from_dir(&cache_dir) {
                                     app.stream = new_stream;
-                                }
-                            } else {
-                                if let Ok(opt_stream) = sectorline::live::LiveTelemetryClient::ensure_circuit_ready(
-                                    &cache_dir,
-                                    &opt.gp_key,
-                                    opt.year,
-                                    &opt.session_type,
-                                ) {
-                                    if let Some(s) = opt_stream {
-                                        app.stream = s;
-                                    } else if let Ok(mut new_stream) = TelemetryStream::load_from_dir(&cache_dir) {
-                                        if opt.is_live {
-                                            new_stream.is_live = true;
-                                        }
-                                        app.stream = new_stream;
-                                    }
                                 }
                             }
                             last_tick = Instant::now();

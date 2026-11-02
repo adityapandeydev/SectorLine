@@ -11,13 +11,12 @@ pub struct TelemetryStream {
     pub current_frame_idx: usize,
     pub playback_speed: f64,
     pub is_paused: bool,
-    pub is_live: bool,
     pub selected_driver_code: String,
     accumulated_ms: f64,
 }
 
 impl TelemetryStream {
-    /// Loads session telemetry datasets from the specified cache folder.
+    /// Loads generated demo datasets from the specified cache folder.
     pub fn load_from_dir<P: AsRef<Path>>(cache_dir: P) -> Result<Self, Box<dyn std::error::Error>> {
         let dir = cache_dir.as_ref();
 
@@ -47,19 +46,17 @@ impl TelemetryStream {
             current_frame_idx: 0,
             playback_speed: 1.0,
             is_paused: false,
-            is_live: false,
             selected_driver_code: first_code,
             accumulated_ms: 0.0,
         })
     }
 
-    /// Creates a TelemetryStream directly from in-memory datasets (used by native OpenF1 client).
+    /// Creates generated demo playback from in-memory datasets.
     pub fn new_in_memory(
         session: SessionInfo,
         track: TrackLayout,
         drivers: Vec<Driver>,
         frames: Vec<TelemetryFrame>,
-        is_live: bool,
     ) -> Self {
         let first_code = drivers.first().map(|d| d.code.clone()).unwrap_or_else(|| "RUS".into());
         Self {
@@ -70,7 +67,6 @@ impl TelemetryStream {
             current_frame_idx: 0,
             playback_speed: 1.0,
             is_paused: false,
-            is_live,
             selected_driver_code: first_code,
             accumulated_ms: 0.0,
         }

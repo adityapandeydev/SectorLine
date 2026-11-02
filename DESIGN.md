@@ -66,3 +66,9 @@ Use sentence-case labels and racing vocabulary. Avoid loud all-caps banners, gra
 ## Visual acceptance
 
 Capture standard, wide, and compact layouts with populated, missing/stale, loading, error, red-flag, and selected-driver states. Use TestBackend snapshots to catch geometry regressions and actual terminal screenshots to assess readability. Check Unicode/no-color fallback, 22+ drivers with scrolling, small-window behavior, and map aspect ratio. Perform one consolidated review/fix pass per milestone, not endless screenshot churn. These checks happen during implementation, not claimed complete by this plan.
+
+## T02 dimensional change record (2 November 2026)
+
+This slice changes labels and removes the misleading live menu option; it does not implement the proposed redesign. Source: `render` and `render_main_body` in `f1_tui/src/ui.rs`. Current vertical dimensions remain H1=3, HB=min16/FLEX, H2=8, H3=1 cells (nominal Hmin=28). Current horizontal dimensions remain W1=38, WM=min30/FLEX, W2=28 (nominal Wmin=96). Border edges remain one cell. The existing source-grounded dimensional sheet therefore still describes the layout geometry; future label widths are bounded by those regions, not new pixel assumptions.
+
+The header now identifies DEMO both during playback and pause, with a Generated telemetry notice. Timing-table and selector labels no longer claim live observations. TestBackend regression checks use a 144x44-cell viewport; responsive redesign and emulator screenshots remain scheduled for M3.

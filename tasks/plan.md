@@ -1,6 +1,6 @@
 # Sector Line implementation plan
 
-Planning baseline: commit `65cb371`; 1 November 2026. Status: T01 evidence baseline completed; T02-T24 remain proposed and application behavior is unchanged. Task list: [todo.md](todo.md). Product scope: [../PRODUCT.md](../PRODUCT.md). UI contract: [../DESIGN.md](../DESIGN.md).
+Planning baseline: commit `65cb371`; 1 November 2026. Status: T01 baseline and T02 honest demo modes completed; T03-T24 remain planned. Task list: [todo.md](todo.md). Product scope: [../PRODUCT.md](../PRODUCT.md). UI contract: [../DESIGN.md](../DESIGN.md).
 
 ## Outcome and release boundary
 

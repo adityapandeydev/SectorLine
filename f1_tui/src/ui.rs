@@ -41,32 +41,19 @@ fn render_header(f: &mut Frame, area: Rect, stream: &TelemetryStream) {
     let mins = (sim_secs / 60.0) as u32;
     let secs = sim_secs % 60.0;
 
-    let speed_badge = if stream.is_live {
-        Span::styled(
-            " 🔴 LIVE TIMING STREAM ",
-            Style::default().fg(Color::White).bg(Color::Red).add_modifier(Modifier::BOLD),
-        )
-    } else if stream.is_paused {
-        Span::styled(" [PAUSED] ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD))
+    let speed_badge = if stream.is_paused {
+        Span::styled(" [DEMO / PAUSED] ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD))
     } else {
-        Span::styled(
-            format!(" [{}x REALTIME] ", stream.playback_speed),
-            Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
-        )
+        Span::styled(format!(" [DEMO / {}x] ", stream.playback_speed), Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD))
     };
-
-    let title_text = if stream.is_live {
-        " 🏁 F1 LIVE RACE CONTROL "
-    } else {
-        " 🏁 F1 RACE CONTROL COMMAND CENTER "
-    };
+    let title_text = " Sector Line ";
 
     let title_line = Line::from(vec![
         Span::styled(title_text, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
         Span::styled(format!("- {} ", stream.session.circuit_name.to_uppercase()), Style::default().fg(Color::Rgb(180, 195, 215))),
         speed_badge,
         Span::raw(" "),
-        Span::styled(" ● GREEN FLAG ", Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled(" Generated telemetry ", Style::default().fg(Color::Gray)),
     ]);
 
     let telemetry_info = Line::from(vec![
@@ -160,7 +147,7 @@ fn render_timing_tower(f: &mut Frame, area: Rect, stream: &TelemetryStream) {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Rgb(70, 85, 110)))
-            .title(Span::styled(" LIVE TIMING TOWER ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+            .title(Span::styled(" DEMO TIMING TOWER ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
     );
 
     f.render_widget(tower_table, area);
@@ -442,7 +429,7 @@ fn render_session_modal(f: &mut Frame, app: &App) {
     f.render_widget(Clear, area);
 
     let block = Block::default()
-        .title(" 🏎️  SELECT GRAND PRIX SESSION / LIVE TIMING ")
+        .title(" SELECT DEMO SESSION ")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
@@ -461,7 +448,7 @@ fn render_session_modal(f: &mut Frame, app: &App) {
         ])
         .split(inner_area);
 
-    let intro = Paragraph::new("Choose an official FIA Grand Prix weekend or connect to the real-time live timing stream:")
+    let intro = Paragraph::new("Generated demos using historical metadata; not observed telemetry or recorded replay:")
         .style(Style::default().fg(Color::Rgb(170, 185, 205)))
         .alignment(Alignment::Center);
     f.render_widget(intro, modal_chunks[0]);
@@ -503,7 +490,6 @@ fn render_session_modal(f: &mut Frame, app: &App) {
             let cursor = if is_selected { " ▶ " } else { "   " };
 
             let badge_style = match opt.badge.as_str() {
-                "LIVE" => Style::default().fg(Color::White).bg(Color::Red).add_modifier(Modifier::BOLD),
                 "RACE" => Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD),
                 "QUALI" => Style::default().fg(Color::White).bg(Color::Magenta).add_modifier(Modifier::BOLD),
                 "SEARCH" | "CUSTOM" => Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD),
