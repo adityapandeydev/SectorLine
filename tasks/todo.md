@@ -1,6 +1,6 @@
 # Sector Line implementation tasks
 
-Status: T01-T03 completed; T04-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
+Status: T01-T04 completed; T05-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
 
 ## T01: Establish real-data and performance baselines
 
@@ -64,7 +64,7 @@ Status: T01-T03 completed; T04-T24 remain planned. Scope confirmed: free histori
 
 ## T04: Build the completed-session catalogue
 
-- [ ] Complete T04.
+- [x] Complete T04.
 
 **Dependencies:** T03. **Scope:** M (at most five likely files).
 
@@ -72,11 +72,13 @@ Status: T01-T03 completed; T04-T24 remain planned. Scope confirmed: free histori
 
 **Acceptance criteria:**
 
-- [ ] Discover available years, meetings and session types using provider IDs.
-- [ ] Search and selection resolve exactly; no hardcoded current grid or silent fallback year.
-- [ ] Cached catalogue permits offline selection and unavailable sessions carry a clear reason.
+- [x] Discover available years, meetings and session types using provider IDs.
+- [x] Search and selection resolve exactly; no hardcoded current grid or silent fallback year.
+- [x] Cached catalogue permits offline selection and unavailable sessions carry a clear reason.
 
 **Verification:** cargo test -p sectorline --locked --test catalogue; fixture-based year/type/alias and offline selection checks.
+
+**Evidence:** [Catalogue behavior and verification](../docs/catalogue.md). Eight offline catalogue tests; public-provider refresh for 2024 and 2023; retained-year offline ID selection; full suite/release/demo pass. Catalogue is a separate CLI surface until T05–T07 connect recording acquisition and TUI loading. No generated playback is substituted for catalogue selection.
 
 ## T05: Acquire one real session incrementally
 

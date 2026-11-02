@@ -41,6 +41,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  --gp NAME           Generate a demo using historical session metadata (Python required)");
         println!("  --year YYYY         Historical metadata year (default: 2026)");
         println!("  --help, -h          Show help");
+        println!("  --catalogue         Browse cached OpenF1 metadata (separate from demo playback)");
+        println!("    --refresh [--year YYYY]  Fetch meetings and optionally that exact year's sessions");
+        println!("    --year YYYY --search TEXT --session ID  Filter metadata/select an exact ID offline");
+        println!("    --catalogue-cache PATH  Override the user catalogue cache path");
         println!("Live access is unavailable; --live and --gp live are disabled.");
         println!("Without options, open the generated demo session selector.");
         return Ok(());
@@ -48,6 +52,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if args.iter().any(|a| a == "--live" || a.eq_ignore_ascii_case("--gp=live")) {
         return Err(sectorline::live::LIVE_UNAVAILABLE.into());
+    }
+    if args.iter().any(|a| a == "--catalogue") {
+        return sectorline::data::catalogue_cli::run(&args);
     }
     let is_demo_mode = args.iter().any(|a| a == "--demo" || a == "--headless");
 
