@@ -51,4 +51,21 @@ ended. A completed session does not guarantee telemetry coverage. Selecting an I
 does not download or play a recording yet; those tasks follow next. See
 [catalogue behavior and verification](docs/catalogue.md).
 
+## Real-data acquisition (developer harness)
+
+T05 adds incremental OpenF1 downloads, independent of demo playback. After fetching
+the 2024 catalogue, this harness writes scratch chunks to a **new** user-cache directory:
+
+```powershell
+cargo run --release --locked -p sectorline --example acquire -- `
+  "$env:LOCALAPPDATA\sectorline\catalogue.json" 9590 `
+  "$env:LOCALAPPDATA\sectorline\scratch-9590"
+```
+
+It uses conservative free-tier pacing and may take several minutes. Optional final
+arguments `START_RFC3339 END_RFC3339` narrow the high-frequency time range. Raw
+responses, validated records and field diagnostics are separate. Missing or invalid
+values are not fabricated. This is acquisition evidence, **not yet a playable,
+resumable recording cache**; T06 adds that layer. See [acquisition details](docs/acquisition.md).
+
 No public release or data redistribution license is configured.

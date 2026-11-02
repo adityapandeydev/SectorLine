@@ -1,6 +1,6 @@
 # Sector Line implementation tasks
 
-Status: T01-T04 completed; T05-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
+Status: T01-T05 completed; T06-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
 
 ## T01: Establish real-data and performance baselines
 
@@ -82,7 +82,7 @@ Status: T01-T04 completed; T05-T24 remain planned. Scope confirmed: free histori
 
 ## T05: Acquire one real session incrementally
 
-- [ ] Complete T05.
+- [x] Complete T05.
 
 **Dependencies:** T04. **Scope:** M (at most five likely files).
 
@@ -90,11 +90,13 @@ Status: T01-T04 completed; T05-T24 remain planned. Scope confirmed: free histori
 
 **Acceptance criteria:**
 
-- [ ] Fetch timestamped drivers, positions, car data and locations in bounded chunks; fetch other supported channels without requiring them to exist.
-- [ ] Honor configured provider rate limits, Retry-After, bounded retries, timeouts and cancellation between chunks.
-- [ ] Validate schema, session identity and numeric domains before accepting a chunk.
+- [x] Fetch timestamped drivers, positions, car data and locations in bounded chunks; fetch other supported channels without requiring them to exist.
+- [x] Honor configured provider rate limits, Retry-After, bounded retries, timeouts and cancellation between chunks.
+- [x] Validate schema, session identity and numeric domains before accepting a chunk.
 
 **Verification:** cargo test -p sectorline --locked --test acquisition; local stub HTTP server for limits, failures and interrupted chunks.
+
+**Evidence:** [Acquisition behavior and verification](../docs/acquisition.md), [real Monza acquisition manifest](../f1_tui/tests/fixtures/acquisition-monza.json). Fourteen local HTTP-stub tests; 42 Rust tests and three Python tests pass. Real session 9590 acquisition delivered 1,219,329 records in 151 bounded chunks across ten channels, with explicit empty queries and field quarantine. Release binary/example and headless demo pass. Raw data remains outside Git in the user cache. Published/resumable recording cache remains T06.
 
 ## T06: Publish a validated offline session cache
 
