@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("    --year YYYY --search TEXT --session ID  Filter metadata/select an exact ID offline");
         println!("    --catalogue-cache PATH  Override the user catalogue cache path");
         println!("Live access is unavailable; --live and --gp live are disabled.");
-        println!("Without options, open cached demo and catalogue search. Recordings open paused in the background; Right/PgDn step recorded time.");
+        println!("Without options, open cached demo and catalogue search. Recordings open paused; Space plays, 1/2/5/0 set speed, Home restarts.");
         println!("  --recording-root PATH  Override the recording cache for the interactive loader");
         println!("  --prepare-session ID   Prepare an exact catalogue recording in the background");
         return Ok(());
@@ -174,24 +174,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(out);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut last_tick = Instant::now();
+    let started = Instant::now();
+    let mut last_draw = Instant::now();
+    let mut dirty = true;
     let target_fps = 30;
     let tick_rate = Duration::from_millis(1000 / target_fps);
 
     // Main Interactive Render Loop
     let run_res = (|| -> Result<(), Box<dyn std::error::Error>> {
         loop {
+            dirty |= app.update_at(started.elapsed());
             if let Some(event) = loader.poll() {
                 app.accept_loader_event(event);
+                dirty = true;
             }
-            terminal.draw(|f| app.render(f))?;
-
-            let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-            if event::poll(timeout)?
-                && let Event::Key(key) = event::read()?
-                && key.kind != crossterm::event::KeyEventKind::Release
-            {
+            if dirty && last_draw.elapsed() >= tick_rate {
+                terminal.draw(|f| app.render(f))?;
+                dirty = false;
+                last_draw = Instant::now();
+            }
+            let timeout = if dirty {
+                tick_rate.saturating_sub(last_draw.elapsed())
+            } else if app.needs_playback_ticks() {
+                tick_rate
+            } else {
+                Duration::from_millis(100)
+            };
+            if event::poll(timeout)? {
+                let event = event::read()?;
+                if matches!(event, Event::Resize(..)) {
+                    dirty = true;
+                    continue;
+                }
+                let Event::Key(key) = event else {
+                    continue;
+                };
+                if key.kind == crossterm::event::KeyEventKind::Release {
+                    continue;
+                }
+                app.update_at(started.elapsed());
                 let action = app.handle_key(key);
+                dirty = true;
                 match action {
                     sectorline::app::AppAction::Quit => break,
                     sectorline::app::AppAction::SwitchSession(opt) => {
@@ -218,10 +241,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     sectorline::app::AppAction::None => {}
                 }
             }
-
-            let elapsed = last_tick.elapsed().as_millis() as f64;
-            last_tick = Instant::now();
-            app.tick(elapsed);
 
             if app.should_quit {
                 break;

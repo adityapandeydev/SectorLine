@@ -1,18 +1,23 @@
+pub mod clock;
 pub mod timeline;
 
 use crate::{
     data::{cache::SessionCache, limits::Cancellation, openf1::Result},
     domain::{ElapsedMillis, PlaybackFrame},
 };
+use clock::{PlaybackClock, PlaybackStatus, Speed};
+use std::time::Duration;
 use timeline::{ReplayPolicy, SessionState, Timeline};
 
-/// T08 manual inspection; the monotonic playback clock follows in T09.
+/// Recorded state sampled by timestamp independently from UI redraw cadence.
 pub struct RecordedReplay {
     timeline: Timeline,
     state: SessionState,
     frame: PlaybackFrame,
     title: String,
     selected: u32,
+    clock: PlaybackClock,
+    now: Duration,
 }
 impl RecordedReplay {
     pub fn from_cache(
@@ -33,12 +38,15 @@ impl RecordedReplay {
             .driver
             .number
             .get();
+        let clock = PlaybackClock::new(timeline.end());
         Ok(Self {
             timeline,
             state,
             frame,
             title,
             selected,
+            clock,
+            now: Duration::ZERO,
         })
     }
     pub fn timeline(&self) -> &Timeline {
@@ -54,16 +62,52 @@ impl RecordedReplay {
         self.selected
     }
     pub fn advance_by(&mut self, milliseconds: u64) -> Result<()> {
-        let target = ElapsedMillis(
-            self.state
-                .elapsed()
-                .0
-                .saturating_add(milliseconds)
-                .min(self.timeline.end().0),
-        );
-        self.state.advance_to(&self.timeline, target)?;
+        self.clock.step(milliseconds, self.now)?;
+        self.project()?;
+        Ok(())
+    }
+    pub fn status(&self) -> PlaybackStatus {
+        self.clock.status()
+    }
+    pub fn speed(&self) -> Speed {
+        self.clock.speed()
+    }
+    pub fn update_at(&mut self, now: Duration) -> Result<bool> {
+        self.clock.sync(now)?;
+        self.now = now;
+        self.project()
+    }
+    pub fn toggle(&mut self) -> Result<()> {
+        self.clock.toggle(self.now)?;
+        self.project()?;
+        Ok(())
+    }
+    pub fn pause(&mut self) -> Result<()> {
+        self.clock.pause(self.now)?;
+        self.project()?;
+        Ok(())
+    }
+    pub fn set_speed(&mut self, speed: Speed) -> Result<()> {
+        self.clock.set_speed(speed, self.now)?;
+        self.project()?;
+        Ok(())
+    }
+    pub fn restart(&mut self) -> Result<()> {
+        self.clock.restart(self.now)?;
+        self.state = self
+            .timeline
+            .state_at(ElapsedMillis(0), ReplayPolicy::EventTimeEstimates)?;
         self.frame = self.state.frame(&self.timeline)?;
         Ok(())
+    }
+    fn project(&mut self) -> Result<bool> {
+        let target = self.clock.position();
+        if target == self.state.elapsed() {
+            return Ok(false);
+        }
+        self.state.advance_to(&self.timeline, target)?;
+        self.frame = self.state.frame(&self.timeline)?;
+        Ok(true)
     }
     pub fn select(&mut self, delta: i32) {
         let current = self

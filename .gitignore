@@ -5,11 +5,6 @@
 .env
 .env.*
 .venv/
-graphify-out/
-strix_runs/
-/docs/
-/DESIGN.md
-/PRODUCT.md
 **/sectorline-recordings/
 **/openf1-*/
 **/openf1-*.lock

@@ -3,8 +3,10 @@ use ratatui::Frame;
 
 use crate::loader::{LoaderEvent, session::SessionResult};
 use crate::replay::RecordedReplay;
+use crate::replay::clock::{PlaybackStatus, Speed};
 use crate::stream::TelemetryStream;
 use crate::ui;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionOption {
@@ -40,6 +42,7 @@ pub struct App {
     pub load_message: Option<String>,
     pub load_error: bool,
     pub prepared_recording: Option<RecordedReplay>,
+    now: Duration,
 }
 
 impl App {
@@ -58,6 +61,7 @@ impl App {
             load_message: None,
             load_error: false,
             prepared_recording: None,
+            now: Duration::ZERO,
         }
     }
 
@@ -103,7 +107,26 @@ impl App {
                     replay.select(1);
                     return AppAction::None;
                 }
-                KeyCode::Char(' ' | '0' | '1' | '2' | '5') => return AppAction::None,
+                KeyCode::Char(' ' | '0' | '1' | '2' | '5') | KeyCode::Home => {
+                    let result = match key.code {
+                        KeyCode::Char(' ') => replay.toggle(),
+                        KeyCode::Home => replay.restart(),
+                        KeyCode::Char('0') => replay.set_speed(Speed::Ten),
+                        KeyCode::Char('2') => replay.set_speed(Speed::Double),
+                        KeyCode::Char('5') => replay.set_speed(Speed::Five),
+                        _ => replay.set_speed(Speed::Normal),
+                    };
+                    if let Err(error) = result {
+                        self.load_error = true;
+                        self.load_message = Some(error.to_string());
+                    }
+                    return AppAction::None;
+                }
+                KeyCode::Char('s' | 'S') => {
+                    let _ = replay.pause();
+                    self.show_session_modal = true;
+                    return AppAction::None;
+                }
                 _ => {}
             }
         }
@@ -206,6 +229,10 @@ impl App {
                     self.stream.toggle_pause();
                     AppAction::None
                 }
+                KeyCode::Home => {
+                    self.stream.restart();
+                    AppAction::None
+                }
                 KeyCode::Char('1') => {
                     self.stream.set_speed(1.0);
                     AppAction::None
@@ -259,6 +286,9 @@ impl App {
                         self.load_error = false;
                     }
                     Ok(SessionResult::Search(mut options)) => {
+                        if let Some(replay) = &mut self.prepared_recording {
+                            let _ = replay.pause();
+                        }
                         let count = options.len();
                         self.session_options = vec![cached_demo_option(&self.stream)];
                         self.session_options.append(&mut options);
@@ -271,7 +301,10 @@ impl App {
                     }
                     Ok(SessionResult::Recording(cache)) => {
                         self.prepared_recording = Some(*cache);
-                        self.load_message = Some("Recorded timing ready. Right steps 1s; PgDn steps 60s. Original delivery times unknown".into());
+                        if let Some(replay) = &mut self.prepared_recording {
+                            let _ = replay.update_at(self.now);
+                        }
+                        self.load_message = Some("Recording ready. Space plays; 1/2/5/0 sets speed; Home restarts paused. Original delivery times unknown".into());
                         self.load_error = false;
                     }
                     Err(error) => {
@@ -284,9 +317,42 @@ impl App {
     }
 
     pub fn tick(&mut self, dt_ms: f64) {
-        if !self.show_session_modal && self.prepared_recording.is_none() {
-            self.stream.tick(dt_ms);
+        if dt_ms.is_finite()
+            && dt_ms >= 0.0
+            && let Ok(dt) = Duration::try_from_secs_f64(dt_ms / 1000.0)
+        {
+            self.update_at(self.now.saturating_add(dt));
         }
+    }
+    /// The event loop passes Instant::elapsed() before controls and redraws.
+    pub fn update_at(&mut self, now: Duration) -> bool {
+        let Some(elapsed) = now.checked_sub(self.now) else {
+            return false;
+        };
+        self.now = now;
+        if let Some(replay) = &mut self.prepared_recording {
+            match replay.update_at(now) {
+                Ok(changed) => changed,
+                Err(error) => {
+                    self.load_error = true;
+                    self.load_message = Some(error.to_string());
+                    false
+                }
+            }
+        } else if !self.show_session_modal {
+            let old = self.stream.current_frame_idx;
+            let ended = self.stream.has_ended;
+            self.stream.tick(elapsed.as_secs_f64() * 1000.0);
+            old != self.stream.current_frame_idx || ended != self.stream.has_ended
+        } else {
+            false
+        }
+    }
+    pub fn needs_playback_ticks(&self) -> bool {
+        self.prepared_recording
+            .as_ref()
+            .map(|r| r.status() == PlaybackStatus::Playing)
+            .unwrap_or(!self.show_session_modal && !self.stream.is_paused && !self.stream.has_ended)
     }
 
     pub fn render(&self, f: &mut Frame) {

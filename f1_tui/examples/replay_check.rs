@@ -125,5 +125,31 @@ fn main() -> Result<()> {
         UtcMillis(timeline.origin().0),
         timeline.end()
     );
+    let mut replay = sectorline::replay::RecordedReplay::new(timeline, "Offline traversal".into())?;
+    replay.set_speed(sectorline::replay::clock::Speed::Twenty)?;
+    replay.toggle()?;
+    let mut ticks = 0;
+    let mut now = std::time::Duration::ZERO;
+    while replay.status() != sectorline::replay::clock::PlaybackStatus::Ended {
+        now += std::time::Duration::from_millis([17, 83, 5, 125][ticks % 4]);
+        replay.update_at(now)?;
+        ticks += 1;
+    }
+    let reference = replay
+        .timeline()
+        .state_at(replay.timeline().end(), ReplayPolicy::EventTimeEstimates)?
+        .frame(replay.timeline())?;
+    assert_eq!(replay.frame(), &reference);
+    replay.update_at(now + std::time::Duration::from_secs(60))?;
+    assert_eq!(replay.frame(), &reference);
+    replay.restart()?;
+    assert_eq!(replay.frame().elapsed(), ElapsedMillis(0));
+    assert_eq!(
+        replay.status(),
+        sectorline::replay::clock::PlaybackStatus::Paused
+    );
+    println!(
+        "Full recorded traversal passed: {ticks} irregular fake-clock ticks at 20x; end stayed fixed, deliberate restart reset state."
+    );
     Ok(())
 }

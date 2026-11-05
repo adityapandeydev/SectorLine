@@ -3,6 +3,7 @@ use crate::{
     app::App,
     domain::{DrsState, Gap},
     replay::RecordedReplay,
+    replay::clock::PlaybackStatus,
 };
 use ratatui::{
     Frame,
@@ -32,7 +33,13 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
         .unwrap_or_else(|| "UTC unavailable".into());
     frame.render_widget(
         Paragraph::new(format!(
-            "Sector Line | RECORDED SNAPSHOT | PAUSED\n{}\nObservation timeline +{} | {utc}",
+            "Sector Line | RECORDED SNAPSHOT | {} | {}\n{}\nObservation timeline +{} | {utc}",
+            match replay.status() {
+                PlaybackStatus::Paused => "PAUSED",
+                PlaybackStatus::Playing => "PLAYING",
+                PlaybackStatus::Ended => "ENDED",
+            },
+            replay.speed().label(),
             replay.title(),
             clock(elapsed)
         ))
@@ -157,7 +164,7 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
         frame.render_widget(Paragraph::new(format!("Selected #{} | {reason}\nSectors, tyres, flags, weather and track view unavailable in this slice",car.driver.number)).wrap(Wrap{trim:true}).style(Style::default().fg(Color::White)),areas[3]);
     }
     frame.render_widget(
-        Paragraph::new("Right +1s | PgDn +60s | Up/Down driver | s sessions | q quit")
+        Paragraph::new("Space play/pause | 1/2/5/0 speed | Home restart | s sessions | q quit")
             .style(Style::default().fg(Color::White)),
         areas[4],
     );

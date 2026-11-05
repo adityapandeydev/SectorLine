@@ -424,7 +424,7 @@ fn reducer_recorded_view_uses_real_frame_and_manual_time_steps_only() {
         assert!(text.contains("original delivery times unknown"));
         assert!(text.contains("NOR #4"));
         assert!(!text.contains("DEMO") && !text.contains("BAKU") && !text.contains("AIR:"));
-        assert!(text.contains("PgDn +60s"));
+        assert!(text.contains("Home restart"));
     }
     let before = app.prepared_recording.as_ref().unwrap().frame().elapsed();
     app.tick(10_000.0);

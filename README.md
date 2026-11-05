@@ -1,7 +1,7 @@
 # Sector Line
 
 An experimental Rust terminal race dashboard with a generated demo and an initial
-recorded timing view backed by OpenF1 historical data. Recorded timing uses explicit
+recorded timing view backed by OpenF1 historical data. Recorded replay uses explicit
 event-time estimates and starts paused. The demo's simulated movement, telemetry,
 gaps and conditions remain clearly labelled DEMO.
 
@@ -29,8 +29,7 @@ RECORDED SNAPSHOT view.
 **Live access is unavailable.** `--live` and `--gp live` exit with an explanation
 before loading a cache or contacting a provider. The Python bridge also rejects
 live requests, and failed historical extraction cannot fall back to the latest
-OpenF1 session. Continuous replay, full race semantics and authenticated live
-ingestion remain future work.
+OpenF1 session. Full race semantics, seeking and authenticated live ingestion remain future work.
 
 ## Completed-session catalogue
 
@@ -125,9 +124,10 @@ cargo run --release --locked -p sectorline -- --prepare-session 9590
 
 Use `--catalogue-cache PATH` and `--recording-root PATH` to override user cache paths.
 Preparation has a 15-minute job deadline; retry resumes saved chunks. A ready
-recording opens **RECORDED SNAPSHOT / PAUSED**. `Right` advances one second and
-`Page Down` advances 60 seconds; Up/Down selects a driver. T09 adds continuous
-playback. The selector's generated option opens the bundled cached demo; legacy
+recording opens **RECORDED SNAPSHOT / PAUSED**. Space starts/pauses timestamp-driven
+playback; `1`/`2`/`5`/`0` select 1x/2x/5x/10x. Home restarts at the beginning,
+paused. `Right` advances one second and `Page Down` advances 60 seconds, pausing
+playback; Up/Down selects a driver. Opening the session selector pauses playback. The selector's generated option opens the bundled cached demo; legacy
 `--gp` extraction remains a startup CLI path.
 
 Recorded values use the latest eligible source observation, with its age shown.
@@ -150,3 +150,17 @@ For an offline full-recording check against raw telemetry:
 cargo run --release --locked -p sectorline --example replay_check -- `
   "$env:LOCALAPPDATA\sectorline\catalogue.json" 9590
 ```
+
+## Playback clock and completion
+
+Playback uses monotonic elapsed time, independently of source sampling cadence and
+terminal redraws. Controls settle time at the old speed before applying a change;
+paused time is never added on resume. Source gaps retain their original spacing.
+The last timestamp shows ENDED and stays fixed; Space cannot wrap or restart it.
+Use Home deliberately, then Space to play again. The generated demo also follows
+its own timestamps and stops at the end.
+
+Rendering is capped at 30 Hz and runs on input/resize/loader updates or advancing
+playback. Paused idle playback does not redraw continually. Rendering performs no
+network/cache reads. Release performance budgets still require their later full
+measurement tasks; current regression checks are not emulator latency guarantees.

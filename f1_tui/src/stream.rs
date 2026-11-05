@@ -11,6 +11,7 @@ pub struct TelemetryStream {
     pub current_frame_idx: usize,
     pub playback_speed: f64,
     pub is_paused: bool,
+    pub has_ended: bool,
     pub selected_driver_code: String,
     accumulated_ms: f64,
 }
@@ -35,6 +36,9 @@ impl TelemetryStream {
         if frames.is_empty() {
             return Err("Telemetry stream contains 0 frames".into());
         }
+        if frames.windows(2).any(|pair| pair[0].timestamp_ms >= pair[1].timestamp_ms) {
+            return Err("Demo timestamps must be strictly increasing".into());
+        }
 
         let first_code = drivers.first().map(|d| d.code.clone()).unwrap_or_else(|| "VER".into());
 
@@ -46,6 +50,7 @@ impl TelemetryStream {
             current_frame_idx: 0,
             playback_speed: 1.0,
             is_paused: false,
+            has_ended: false,
             selected_driver_code: first_code,
             accumulated_ms: 0.0,
         })
@@ -67,6 +72,7 @@ impl TelemetryStream {
             current_frame_idx: 0,
             playback_speed: 1.0,
             is_paused: false,
+            has_ended: false,
             selected_driver_code: first_code,
             accumulated_ms: 0.0,
         }
@@ -79,26 +85,44 @@ impl TelemetryStream {
 
     /// Advance simulation playback by `dt_ms` real-world milliseconds scaled by `playback_speed`.
     pub fn tick(&mut self, dt_ms: f64) {
-        if self.is_paused || self.frames.is_empty() {
+        if self.is_paused
+            || self.has_ended
+            || self.frames.is_empty()
+            || !dt_ms.is_finite()
+            || dt_ms < 0.0
+        {
             return;
         }
 
         self.accumulated_ms += dt_ms * self.playback_speed;
 
-        // Frames are recorded at ~5 Hz (200ms per frame)
-        let frame_duration_ms = 200.0;
-        while self.accumulated_ms >= frame_duration_ms {
-            self.accumulated_ms -= frame_duration_ms;
-            self.current_frame_idx = (self.current_frame_idx + 1) % self.frames.len();
+        let target = self.frames[0].timestamp_ms as f64 + self.accumulated_ms;
+        self.current_frame_idx = self
+            .frames
+            .partition_point(|frame| frame.timestamp_ms as f64 <= target)
+            .saturating_sub(1);
+        if self.current_frame_idx == self.frames.len() - 1 {
+            self.has_ended = true;
+            self.is_paused = true;
         }
     }
 
     pub fn toggle_pause(&mut self) {
-        self.is_paused = !self.is_paused;
+        if !self.has_ended {
+            self.is_paused = !self.is_paused;
+        }
     }
 
     pub fn set_speed(&mut self, speed: f64) {
-        self.playback_speed = speed.clamp(0.25, 20.0);
+        if speed.is_finite() {
+            self.playback_speed = speed.clamp(0.25, 20.0);
+        }
+    }
+    pub fn restart(&mut self) {
+        self.current_frame_idx = 0;
+        self.accumulated_ms = 0.0;
+        self.has_ended = false;
+        self.is_paused = true;
     }
 
     /// Returns the active telemetry data for the currently selected driver.

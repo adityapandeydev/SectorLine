@@ -80,7 +80,9 @@ fn render_header(f: &mut Frame, area: Rect, stream: &TelemetryStream) {
     let mins = (sim_secs / 60.0) as u32;
     let secs = sim_secs % 60.0;
 
-    let speed_badge = if stream.is_paused {
+    let speed_badge = if stream.has_ended {
+        Span::styled(" [DEMO / ENDED] Home restarts ",Style::default().fg(Color::White))
+    }else if stream.is_paused {
         Span::styled(" [DEMO / PAUSED] ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD))
     } else {
         Span::styled(format!(" [DEMO / {}x] ", stream.playback_speed), Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD))
