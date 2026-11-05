@@ -33,6 +33,40 @@ pub fn render(f: &mut Frame, app: &App) {
     if app.show_session_modal {
         render_session_modal(f, app);
     }
+    if let Some(message) = &app.load_message {
+        let h = 3.min(size.height);
+        let area = Rect::new(
+            size.x,
+            size.y + size.height.saturating_sub(h),
+            size.width,
+            h,
+        );
+        f.render_widget(Clear, area);
+        let prefix = if app.load_id.is_some() {
+            "Loading"
+        } else if app.load_error {
+            "Error"
+        } else {
+            "Status"
+        };
+        let message_area = Rect::new(area.x, area.y, area.width, h.saturating_sub(1));
+        let help_area = Rect::new(area.x, area.y + h.saturating_sub(1), area.width, 1.min(h));
+        f.render_widget(
+            Paragraph::new(format!("{prefix}: {message}"))
+                .wrap(ratatui::widgets::Wrap { trim: true })
+                .style(Style::default().fg(if app.load_error {
+                    Color::Yellow
+                } else {
+                    Color::White
+                })),
+            message_area,
+        );
+        f.render_widget(
+            Paragraph::new("Esc cancel | r retry | s sessions | q quit")
+                .style(Style::default().fg(Color::White)),
+            help_area,
+        );
+    }
 }
 
 fn render_header(f: &mut Frame, area: Rect, stream: &TelemetryStream) {
@@ -429,7 +463,7 @@ fn render_session_modal(f: &mut Frame, app: &App) {
     f.render_widget(Clear, area);
 
     let block = Block::default()
-        .title(" SELECT DEMO SESSION ")
+        .title(" DEMO / SESSION CATALOGUE ")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
@@ -448,7 +482,7 @@ fn render_session_modal(f: &mut Frame, app: &App) {
         ])
         .split(inner_area);
 
-    let intro = Paragraph::new("Generated demos using historical metadata; not observed telemetry or recorded replay:")
+    let intro = Paragraph::new("Generated demo or recorded-session preparation. Current playback remains DEMO.")
         .style(Style::default().fg(Color::Rgb(170, 185, 205)))
         .alignment(Alignment::Center);
     f.render_widget(intro, modal_chunks[0]);
@@ -459,13 +493,13 @@ fn render_session_modal(f: &mut Frame, app: &App) {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
-            .title(" 🔍 SEARCH ANY GRAND PRIX & YEAR IN F1 HISTORY ")
+            .title(" SEARCH CACHED CATALOGUE ")
             .style(Style::default().bg(Color::Rgb(20, 30, 45)));
 
         let search_text = Line::from(vec![
             Span::styled(" Query: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                if app.search_input.is_empty() { "e.g. Silverstone 2022, Monza 2023, 2021 Abu Dhabi, 2026 Baku..." } else { &app.search_input },
+                if app.search_input.is_empty() { "e.g. 2024 Monza Q, 2023 Spa R" } else { &app.search_input },
                 if app.search_input.is_empty() { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD) }
             ),
             Span::styled(" █", Style::default().fg(Color::Yellow)),
@@ -473,7 +507,7 @@ fn render_session_modal(f: &mut Frame, app: &App) {
 
         let help_text = Line::from(vec![
             Span::styled(" [Enter] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw("Fetch & Stream Telemetry  |  "),
+            Span::raw("Search catalogue  |  "),
             Span::styled(" [Esc] ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
             Span::raw("Cancel Search"),
         ]);
@@ -485,7 +519,9 @@ fn render_session_modal(f: &mut Frame, app: &App) {
         f.render_widget(p, modal_chunks[1]);
     } else {
         let mut rows = Vec::new();
-        for (i, opt) in app.session_options.iter().enumerate() {
+        let visible = modal_chunks[1].height as usize;
+        let start = app.selected_session_idx.saturating_sub(visible.saturating_sub(1));
+        for (i, opt) in app.session_options.iter().enumerate().skip(start).take(visible) {
             let is_selected = i == app.selected_session_idx;
             let cursor = if is_selected { " ▶ " } else { "   " };
 
@@ -531,7 +567,7 @@ fn render_session_modal(f: &mut Frame, app: &App) {
             Span::styled(" [Typing Query] ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
             Span::raw("Type GP name & Season Year  |  "),
             Span::styled(" [Enter] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw("Search & Load  |  "),
+            Span::raw("Search catalogue  |  "),
             Span::styled(" [Esc] ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
             Span::raw("Cancel"),
         ])

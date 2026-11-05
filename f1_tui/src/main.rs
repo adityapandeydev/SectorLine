@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use sectorline::app::App;
 use sectorline::stream::TelemetryStream;
+use sectorline::loader::session::{SessionRequest, WorkerConfig, session_loader};
 
 fn find_cache_dir() -> PathBuf {
     let candidate_paths = [
@@ -46,7 +47,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("    --year YYYY --search TEXT --session ID  Filter metadata/select an exact ID offline");
         println!("    --catalogue-cache PATH  Override the user catalogue cache path");
         println!("Live access is unavailable; --live and --gp live are disabled.");
-        println!("Without options, open the generated demo session selector.");
+        println!("Without options, open cached demo and catalogue search. Recordings are prepared in the background; playback remains demo-only.");
+        println!("  --recording-root PATH  Override the recording cache for the interactive loader");
+        println!("  --prepare-session ID   Prepare an exact catalogue recording in the background");
         return Ok(());
     }
 
@@ -57,6 +60,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return sectorline::data::catalogue_cli::run(&args);
     }
     let is_demo_mode = args.iter().any(|a| a == "--demo" || a == "--headless");
+    let prepare_key = if let Some(index) = args.iter().position(|a| a == "--prepare-session") {
+        Some(
+            args.get(index + 1)
+                .ok_or("--prepare-session needs a numeric session ID")?
+                .parse::<u32>()?,
+        )
+    } else {
+        None
+    };
+    if is_demo_mode && prepare_key.is_some() {
+        return Err("--prepare-session opens the interactive loader; omit --demo".into());
+    }
 
     // Parse --gp and --year arguments
     let mut target_gp: Option<String> = None;
@@ -123,6 +138,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    let option_path = |flag: &str| {
+        args.windows(2)
+            .find(|pair| pair[0] == flag)
+            .map(|pair| PathBuf::from(&pair[1]))
+    };
+    let catalogue_path = match option_path("--catalogue-cache") {
+        Some(path) => path,
+        None => sectorline::data::catalogue::default_cache_path()?,
+    };
+    let recording_root = match option_path("--recording-root") {
+        Some(path) => path,
+        None => sectorline::data::paths::session_cache_root().map_err(|e| e.to_string())?,
+    };
+    let loader = session_loader(WorkerConfig {
+        demo_dir: cache_dir.clone(),
+        catalogue_path,
+        recording_root,
+        limits: sectorline::data::limits::Limits::default(),
+        endpoint: "https://api.openf1.org/v1".into(),
+        job_timeout: Duration::from_secs(15 * 60),
+    });
+    let mut last_request: Option<SessionRequest> = None;
+    if let Some(key) = prepare_key {
+        let request = SessionRequest::Recording(key);
+        app.begin_loading(loader.start(request.clone()));
+        last_request = Some(request);
+        app.show_session_modal = false;
+    }
+
     // Interactive Terminal Setup
     enable_raw_mode()?;
     let mut out = stdout();
@@ -137,45 +181,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Main Interactive Render Loop
     let run_res = (|| -> Result<(), Box<dyn std::error::Error>> {
         loop {
+            if let Some(event) = loader.poll() {
+                app.accept_loader_event(event);
+            }
             terminal.draw(|f| app.render(f))?;
 
             let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-            if event::poll(timeout)? {
-                if let Event::Key(key) = event::read()? {
-                    let action = app.handle_key(key);
-                    match action {
-                        sectorline::app::AppAction::Quit => break,
-                        sectorline::app::AppAction::SwitchSession(opt) => {
-                            terminal.draw(|f| {
-                                let area = sectorline::ui::centered_rect(60, 20, f.area());
-                                f.render_widget(ratatui::widgets::Clear, area);
-                                let p = ratatui::widgets::Paragraph::new(format!(
-                                    "\n  Loading {}...\n  Preparing generated demo frames and session metadata...",
-                                    opt.title
-                                ))
-                                .block(
-                                    ratatui::widgets::Block::default()
-                                        .borders(ratatui::widgets::Borders::ALL)
-                                        .border_type(ratatui::widgets::BorderType::Rounded)
-                                        .title(" 🏎️  SESSION LOADER ")
-                                        .style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan)),
-                                );
-                                f.render_widget(p, area);
-                            })?;
-
-                            if let Ok(opt_stream) = sectorline::live::LiveTelemetryClient::ensure_circuit_ready(
-                                &cache_dir, &opt.gp_key, opt.year, &opt.session_type,
-                            ) {
-                                if let Some(s) = opt_stream {
-                                    app.stream = s;
-                                } else if let Ok(new_stream) = TelemetryStream::load_from_dir(&cache_dir) {
-                                    app.stream = new_stream;
-                                }
-                            }
-                            last_tick = Instant::now();
-                        }
-                        sectorline::app::AppAction::None => {}
+            if event::poll(timeout)?
+                && let Event::Key(key) = event::read()?
+                && key.kind != crossterm::event::KeyEventKind::Release
+            {
+                let action = app.handle_key(key);
+                match action {
+                    sectorline::app::AppAction::Quit => break,
+                    sectorline::app::AppAction::SwitchSession(opt) => {
+                        let request = opt
+                            .recording_key
+                            .map(SessionRequest::Recording)
+                            .unwrap_or(SessionRequest::Demo);
+                        let id = loader.start(request.clone());
+                        last_request = Some(request);
+                        app.begin_loading(id);
                     }
+                    sectorline::app::AppAction::SearchCatalogue(query) => {
+                        let request = SessionRequest::Search(query);
+                        let id = loader.start(request.clone());
+                        last_request = Some(request);
+                        app.begin_loading(id);
+                    }
+                    sectorline::app::AppAction::CancelLoad => loader.cancel(),
+                    sectorline::app::AppAction::RetryLoad => {
+                        if let Some(request) = &last_request {
+                            app.begin_loading(loader.start(request.clone()));
+                        }
+                    }
+                    sectorline::app::AppAction::None => {}
                 }
             }
 
@@ -190,6 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     })();
 
+    loader.cancel();
     // Terminal Teardown
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;

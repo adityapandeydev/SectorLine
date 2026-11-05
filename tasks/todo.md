@@ -1,6 +1,6 @@
 # Sector Line implementation tasks
 
-Status: T01-T06 completed; T07-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
+Status: T01-T07 completed; T08-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
 
 ## T01: Establish real-data and performance baselines
 
@@ -124,7 +124,7 @@ Status: T01-T06 completed; T07-T24 remain planned. Scope confirmed: free histori
 
 ## T07: Keep session loading off the UI thread
 
-- [ ] Complete T07.
+- [x] Complete T07.
 
 **Dependencies:** T04,T05,T06. **Scope:** M (at most five likely files).
 
@@ -132,11 +132,13 @@ Status: T01-T06 completed; T07-T24 remain planned. Scope confirmed: free histori
 
 **Acceptance criteria:**
 
-- [ ] Background worker sends bounded progress/results and observes cancellation/timeouts.
-- [ ] Each request has an ID; stale results cannot replace a newer selection; preserve the current usable session on error.
-- [ ] Input, resize and quit remain responsive during slow acquisition; errors are visible and actionable.
+- [x] Background worker sends bounded progress/results and observes cancellation/timeouts.
+- [x] Each request has an ID; stale results cannot replace a newer selection; preserve the current usable session on error.
+- [x] Input, resize and quit remain responsive during slow acquisition; errors are visible and actionable.
 
 **Verification:** cargo test -p sectorline --locked --test loader; manual slow-server cancel/switch/quit trace.
+
+**Evidence:** Six loader tests verify latest-result isolation, one pending request, bounded progress, job deadlines, nonblocking cancel/drop, retained-session errors and a delayed local HTTP cancel/switch/resize/quit trace. All 59 Rust tests and three Python tests pass; release/demo pass. Real TUI preparation reverified the 151-chunk Monza cache, displayed progress/readiness and restored the terminal on quit. Source-grounded dimensional reference stays outside Git. Recording preparation is available through catalogue search or --prepare-session; the displayed dashboard remains DEMO until T08–T09. Legacy CLI --gp extraction remains a startup-only path.
 
 ## T08: Normalize observations into deterministic session state
 

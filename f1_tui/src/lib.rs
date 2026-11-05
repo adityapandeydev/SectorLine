@@ -2,6 +2,7 @@ pub mod app;
 pub mod data;
 pub mod domain;
 pub mod live;
+pub mod loader;
 pub mod models;
 pub mod stream;
 pub mod track;

@@ -20,7 +20,7 @@ The cached demo runs without Python. Historical extraction through
 
 ## Current status
 
-Starting without options opens the demo session selector. `--demo` (or
+Starting without options opens the cached demo and session catalogue selector. `--demo` (or
 `--headless`) runs 20 generated frames without opening the TUI. All current
 sessions, including those generated through `--gp` and `--year`, remain demos.
 
@@ -100,3 +100,29 @@ including explicit empty queries; source gaps remain gaps. Cache completion does
 not yet enable TUI replay—that integration follows T07–T09.
 
 No public release or data redistribution license is configured.
+
+## Background session preparation
+
+Press `s`, then `c` or `/` to search a previously fetched catalogue (for example,
+`2024 Monza R`). Select a provider session to verify its recording cache or resume
+its download in the background. If the catalogue is missing, fetch it first with
+`--catalogue --refresh --year 2024`. Search never assumes a year or substitutes
+generated data for a recording.
+
+During loading, `Esc` cancels, `r` retries the last request, `s` opens the selector,
+and `q`/Ctrl+C quits. The previous session remains usable on cancellation or error.
+One worker keeps only the newest pending selection; old results cannot overwrite
+it. Progress and completion slots are bounded. Network calls retain their timeouts;
+cancellation takes effect when an in-flight call returns, while input stays usable.
+
+You can also start preparation directly:
+
+```powershell
+cargo run --release --locked -p sectorline -- --prepare-session 9590
+```
+
+Use `--catalogue-cache PATH` and `--recording-root PATH` to override user cache paths.
+Preparation has a 15-minute job deadline; retry resumes saved chunks. A ready
+recording is retained for the next replay stage. **The displayed dashboard remains
+DEMO until T08–T09 implement recorded playback.** The selector's generated option
+opens the bundled cached demo; legacy `--gp` extraction remains a startup CLI path.

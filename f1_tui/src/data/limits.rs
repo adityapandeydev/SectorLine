@@ -8,14 +8,25 @@ use std::{
 };
 
 #[derive(Debug, Clone, Default)]
-pub struct Cancellation(Arc<AtomicBool>);
+pub struct Cancellation {
+    cancelled: Arc<AtomicBool>,
+    deadline: Option<Instant>,
+}
 impl Cancellation {
+    pub fn with_timeout(timeout: Duration) -> Self {
+        Self {
+            cancelled: Arc::new(AtomicBool::new(false)),
+            deadline: Instant::now().checked_add(timeout),
+        }
+    }
     pub fn cancel(&self) {
-        self.0.store(true, Ordering::Relaxed);
+        self.cancelled.store(true, Ordering::Relaxed);
     }
     pub fn check(&self) -> Result<(), String> {
-        if self.0.load(Ordering::Relaxed) {
+        if self.cancelled.load(Ordering::Relaxed) {
             Err("Acquisition cancelled".into())
+        } else if self.deadline.is_some_and(|d| Instant::now() >= d) {
+            Err("Loading timed out; retry or choose another session".into())
         } else {
             Ok(())
         }

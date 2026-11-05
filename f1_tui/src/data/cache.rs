@@ -1,4 +1,5 @@
 //! Immutable completed recordings and a journal for resumable partial acquisition.
+use super::limits::Cancellation;
 use super::openf1::{
     AcquisitionRequest, Channel, ChunkMetadata, ChunkStore, Result, ValidatedChunk, Window,
 };
@@ -161,11 +162,26 @@ impl SessionCache {
         root.join(spec.stem()).exists()
     }
     pub fn open(root: &Path, expected: &CacheSpec) -> Result<Self> {
+        Self::open_cancellable(root, expected, &Cancellation::default(), &|_, _| {})
+    }
+    pub fn open_cancellable(
+        root: &Path,
+        expected: &CacheSpec,
+        cancel: &Cancellation,
+        progress: &dyn Fn(usize, usize),
+    ) -> Result<Self> {
         let directory = root.join(expected.stem());
-        Self::load(directory.clone(), expected, true)
+        Self::load_cancellable(directory.clone(), expected, true, cancel, progress)
             .map_err(|e| format!("Cannot open recording {}: {e}", directory.display()).into())
     }
-    fn load(directory: PathBuf, expected: &CacheSpec, complete: bool) -> Result<Self> {
+    fn load_cancellable(
+        directory: PathBuf,
+        expected: &CacheSpec,
+        complete: bool,
+        cancel: &Cancellation,
+        progress: &dyn Fn(usize, usize),
+    ) -> Result<Self> {
+        cancel.check()?;
         reject_link(&directory)?;
         let manifest: Manifest = serde_json::from_slice(&read_bounded(
             &directory.join("manifest.json"),
@@ -179,11 +195,14 @@ impl SessionCache {
         };
         // Validate one bounded chunk at a time, never trusting just the manifest.
         for i in 0..cache.chunk_count() {
+            cancel.check()?;
             let chunk = cache.read_chunk(i)?;
             if i == 0 {
                 cache.drivers = roster(&chunk)?;
             }
+            progress(i + 1, cache.chunk_count());
         }
+        cancel.check()?;
         Ok(cache)
     }
     pub fn directory(&self) -> &Path {
@@ -237,6 +256,15 @@ pub struct CacheWriter {
 }
 impl CacheWriter {
     pub fn begin(root: &Path, spec: &CacheSpec) -> Result<Self> {
+        Self::begin_cancellable(root, spec, &Cancellation::default(), &|_, _| {})
+    }
+    pub fn begin_cancellable(
+        root: &Path,
+        spec: &CacheSpec,
+        cancel: &Cancellation,
+        progress: &dyn Fn(usize, usize),
+    ) -> Result<Self> {
+        cancel.check()?;
         let plan = spec.plan()?;
         fs::create_dir_all(root)?;
         reject_link(root)?;
@@ -277,7 +305,13 @@ impl CacheWriter {
             plan,
         };
         if writer.partial.directory.exists() {
-            writer.partial = SessionCache::load(writer.partial.directory.clone(), spec, false)?;
+            writer.partial = SessionCache::load_cancellable(
+                writer.partial.directory.clone(),
+                spec,
+                false,
+                cancel,
+                progress,
+            )?;
         } else {
             fs::create_dir(&writer.partial.directory)?;
             writer.journal()?;
@@ -312,13 +346,23 @@ impl CacheWriter {
         atomic_file(&self.partial.directory.join("manifest.json"), &bytes)
     }
     pub fn finish(self) -> Result<SessionCache> {
+        self.finish_cancellable(&Cancellation::default(), &|_, _| {})
+    }
+    pub fn finish_cancellable(
+        self,
+        cancel: &Cancellation,
+        progress: &dyn Fn(usize, usize),
+    ) -> Result<SessionCache> {
+        cancel.check()?;
         self.partial
             .manifest
             .validate(&self.partial.manifest.spec, true)?;
-        let verified = SessionCache::load(
+        let verified = SessionCache::load_cancellable(
             self.partial.directory.clone(),
             &self.partial.manifest.spec,
             true,
+            cancel,
+            progress,
         )?;
         let final_path = self.root.join(self.partial.manifest.spec.stem());
         if final_path.exists() {
@@ -326,6 +370,7 @@ impl CacheWriter {
                 "Completed recording appeared while publishing; refusing replacement".into(),
             );
         }
+        cancel.check()?;
         // Directory rename is the publication boundary: incomplete data never has
         // the final recording name. Both paths are on the same filesystem.
         fs::rename(&self.partial.directory, &final_path)?;

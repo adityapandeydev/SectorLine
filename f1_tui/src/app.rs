@@ -1,6 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 
+use crate::data::cache::SessionCache;
+use crate::loader::{LoaderEvent, session::SessionResult};
 use crate::stream::TelemetryStream;
 use crate::ui;
 
@@ -12,6 +14,8 @@ pub struct SessionOption {
     pub session_type: String,
     pub badge: String,
     pub subtitle: String,
+    pub recording_key: Option<u32>,
+    pub unavailable_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +23,9 @@ pub enum AppAction {
     None,
     Quit,
     SwitchSession(SessionOption),
+    SearchCatalogue(String),
+    CancelLoad,
+    RetryLoad,
 }
 
 pub struct App {
@@ -29,76 +36,15 @@ pub struct App {
     pub session_options: Vec<SessionOption>,
     pub is_searching: bool,
     pub search_input: String,
+    pub load_id: Option<u64>,
+    pub load_message: Option<String>,
+    pub load_error: bool,
+    pub prepared_recording: Option<SessionCache>,
 }
 
 impl App {
     pub fn new(stream: TelemetryStream, start_with_modal: bool) -> Self {
-        let session_options = vec![
-            SessionOption {
-                title: "🇦🇿 2026 Azerbaijan Grand Prix (Baku)".to_string(),
-                gp_key: "Baku".to_string(),
-                year: 2026,
-                session_type: "R".to_string(),
-                badge: "DEMO".to_string(),
-                subtitle: "Generated demo using historical session metadata; not recorded replay".to_string(),
-            },
-            SessionOption {
-                title: "🇦🇿 2024 Azerbaijan Grand Prix (Baku)".to_string(),
-                gp_key: "Baku".to_string(),
-                year: 2024,
-                session_type: "R".to_string(),
-                badge: "DEMO".to_string(),
-                subtitle: "Generated demo using historical session metadata; not recorded replay".to_string(),
-            },
-            SessionOption {
-                title: "🇮🇹 2024 Italian Grand Prix (Monza)".to_string(),
-                gp_key: "Monza".to_string(),
-                year: 2024,
-                session_type: "R".to_string(),
-                badge: "DEMO".to_string(),
-                subtitle: "Generated demo using historical session metadata; not recorded replay".to_string(),
-            },
-            SessionOption {
-                title: "🇧🇪 2024 Belgian Grand Prix (Spa)".to_string(),
-                gp_key: "Spa".to_string(),
-                year: 2024,
-                session_type: "R".to_string(),
-                badge: "DEMO".to_string(),
-                subtitle: "Generated demo using historical session metadata; not recorded replay".to_string(),
-            },
-            SessionOption {
-                title: "🇬🇧 2024 British Grand Prix (Silverstone)".to_string(),
-                gp_key: "Silverstone".to_string(),
-                year: 2024,
-                session_type: "R".to_string(),
-                badge: "DEMO".to_string(),
-                subtitle: "Generated demo using historical session metadata; not recorded replay".to_string(),
-            },
-            SessionOption {
-                title: "🇦🇪 2023 Abu Dhabi Grand Prix (Yas Marina)".to_string(),
-                gp_key: "Abu Dhabi".to_string(),
-                year: 2023,
-                session_type: "R".to_string(),
-                badge: "DEMO".to_string(),
-                subtitle: "Generated demo using historical session metadata; not recorded replay".to_string(),
-            },
-            SessionOption {
-                title: "🇦🇪 2021 Abu Dhabi Grand Prix (Yas Marina)".to_string(),
-                gp_key: "Abu Dhabi".to_string(),
-                year: 2021,
-                session_type: "R".to_string(),
-                badge: "DEMO".to_string(),
-                subtitle: "Generated demo using historical session metadata; not recorded replay".to_string(),
-            },
-            SessionOption {
-                title: "🔍 SEARCH ANY GRAND PRIX / YEAR".to_string(),
-                gp_key: "SEARCH".to_string(),
-                year: 2026,
-                session_type: "R".to_string(),
-                badge: "SEARCH".to_string(),
-                subtitle: "Choose historical metadata for a generated demo (Python required)".to_string(),
-            },
-        ];
+        let session_options = vec![cached_demo_option(&stream), search_option()];
 
         Self {
             stream,
@@ -108,10 +54,31 @@ impl App {
             session_options,
             is_searching: false,
             search_input: String::new(),
+            load_id: None,
+            load_message: None,
+            load_error: false,
+            prepared_recording: None,
         }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> AppAction {
+        if key.code == KeyCode::Char('c')
+            && key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL)
+        {
+            self.should_quit = true;
+            return AppAction::Quit;
+        }
+        if key.code == KeyCode::Esc && self.load_id.is_some() {
+            self.load_id = None;
+            self.load_error = false;
+            self.load_message = Some("Loading cancelled; previous session retained".into());
+            return AppAction::CancelLoad;
+        }
+        if key.code == KeyCode::Char('r') && !self.is_searching {
+            return AppAction::RetryLoad;
+        }
         if self.show_session_modal {
             if self.is_searching {
                 match key.code {
@@ -125,7 +92,9 @@ impl App {
                         AppAction::None
                     }
                     KeyCode::Char(c) => {
-                        self.search_input.push(c);
+                        if !c.is_control() && self.search_input.chars().count() < 128 {
+                            self.search_input.push(c);
+                        }
                         AppAction::None
                     }
                     KeyCode::Enter => {
@@ -135,37 +104,9 @@ impl App {
                             return AppAction::None;
                         }
 
-                        // Parse year from query (e.g. "Silverstone 2022" -> year 2022, gp "Silverstone")
-                        let mut parsed_year = 2026;
-                        let mut words = Vec::new();
-                        for part in query.split_whitespace() {
-                            if let Ok(y) = part.parse::<u32>() {
-                                if (1950..=2030).contains(&y) {
-                                    parsed_year = y;
-                                    continue;
-                                }
-                            }
-                            words.push(part);
-                        }
-
-                        let clean_gp = if words.is_empty() {
-                            "Baku".to_string()
-                        } else {
-                            words.join(" ")
-                        };
-
-                        let custom_opt = SessionOption {
-                            title: format!("🏁 {} {} (Custom Query)", parsed_year, clean_gp),
-                            gp_key: clean_gp.clone(),
-                            year: parsed_year,
-                            session_type: "R".to_string(),
-                            badge: "CUSTOM".to_string(),
-                            subtitle: format!("Authentic FIA telemetry for {} {}", parsed_year, clean_gp),
-                        };
-
+                        let query = query.to_owned();
                         self.is_searching = false;
-                        self.show_session_modal = false;
-                        AppAction::SwitchSession(custom_opt)
+                        AppAction::SearchCatalogue(query)
                     }
                     _ => AppAction::None,
                 }
@@ -201,12 +142,21 @@ impl App {
                         AppAction::None
                     }
                     KeyCode::Enter => {
-                        if self.session_options[self.selected_session_idx].badge == "SEARCH" {
+                        let Some(option) = self.session_options.get(self.selected_session_idx)
+                        else {
+                            return AppAction::None;
+                        };
+                        if let Some(reason) = &option.unavailable_reason {
+                            self.load_message = Some(reason.clone());
+                            self.load_error = true;
+                            return AppAction::None;
+                        }
+                        if option.badge == "SEARCH" {
                             self.is_searching = true;
                             self.search_input.clear();
                             AppAction::None
                         } else {
-                            let opt = self.session_options[self.selected_session_idx].clone();
+                            let opt = option.clone();
                             self.show_session_modal = false;
                             AppAction::SwitchSession(opt)
                         }
@@ -257,6 +207,53 @@ impl App {
         }
     }
 
+    pub fn begin_loading(&mut self, id: u64) {
+        self.load_id = Some(id);
+        self.load_error = false;
+        self.load_message = Some("Loading session; Esc cancels, s opens sessions, q quits".into());
+    }
+    pub fn accept_loader_event(&mut self, event: LoaderEvent<SessionResult>) {
+        let id = match &event {
+            LoaderEvent::Progress { id, .. } | LoaderEvent::Finished { id, .. } => *id,
+        };
+        if self.load_id != Some(id) {
+            return;
+        }
+        match event {
+            LoaderEvent::Progress { message, .. } => self.load_message = Some(message),
+            LoaderEvent::Finished { result, .. } => {
+                self.load_id = None;
+                match result {
+                    Ok(SessionResult::Demo(stream)) => {
+                        self.stream = *stream;
+                        self.load_message = Some("Generated demo ready".into());
+                        self.load_error = false;
+                    }
+                    Ok(SessionResult::Search(mut options)) => {
+                        let count = options.len();
+                        self.session_options = vec![cached_demo_option(&self.stream)];
+                        self.session_options.append(&mut options);
+                        self.session_options.push(search_option());
+                        self.selected_session_idx = 1;
+                        self.show_session_modal = true;
+                        self.load_message = Some(format!(
+                            "{count} catalogue matches. Enter prepares a recording; current display remains DEMO"
+                        ));
+                    }
+                    Ok(SessionResult::Recording(cache)) => {
+                        self.prepared_recording = Some(cache);
+                        self.load_message = Some("Recording cached and verified; recorded playback unavailable. Current display remains DEMO".into());
+                        self.load_error = false;
+                    }
+                    Err(error) => {
+                        self.load_error = true;
+                        self.load_message = Some(format!("{error}. Previous session retained"));
+                    }
+                }
+            }
+        }
+    }
+
     pub fn tick(&mut self, dt_ms: f64) {
         if !self.show_session_modal {
             self.stream.tick(dt_ms);
@@ -265,5 +262,30 @@ impl App {
 
     pub fn render(&self, f: &mut Frame) {
         ui::render(f, self);
+    }
+}
+
+fn cached_demo_option(stream: &TelemetryStream) -> SessionOption {
+    SessionOption {
+        title: stream.session.event_name.clone(),
+        gp_key: "CACHED_DEMO".into(),
+        year: 0,
+        session_type: stream.session.session_type.clone(),
+        badge: "DEMO".into(),
+        subtitle: "Generated cached demo; not recorded replay".into(),
+        recording_key: None,
+        unavailable_reason: None,
+    }
+}
+fn search_option() -> SessionOption {
+    SessionOption {
+        title: "Search cached session catalogue".into(),
+        gp_key: "SEARCH".into(),
+        year: 0,
+        session_type: String::new(),
+        badge: "SEARCH".into(),
+        subtitle: "Use a year, meeting and type; e.g. 2024 Monza Q".into(),
+        recording_key: None,
+        unavailable_reason: None,
     }
 }
