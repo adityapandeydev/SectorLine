@@ -1,6 +1,6 @@
 # Sector Line implementation tasks
 
-Status: T01-T05 completed; T06-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
+Status: T01-T06 completed; T07-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
 
 ## T01: Establish real-data and performance baselines
 
@@ -100,7 +100,7 @@ Status: T01-T05 completed; T06-T24 remain planned. Scope confirmed: free histori
 
 ## T06: Publish a validated offline session cache
 
-- [ ] Complete T06.
+- [x] Complete T06.
 
 **Dependencies:** T05. **Scope:** M (at most five likely files).
 
@@ -108,17 +108,19 @@ Status: T01-T05 completed; T06-T24 remain planned. Scope confirmed: free histori
 
 **Acceptance criteria:**
 
-- [ ] Versioned manifest includes exact identity, coverage, source/retrieval metadata and checksums; publish atomically.
-- [ ] Interrupted downloads resume without duplicate events; corrupt and incompatible caches are reported or rebuilt explicitly.
-- [ ] Use user cache directories rather than source-relative locations; bounded raw chunks never become bulk Git additions.
+- [x] Versioned manifest includes exact identity, coverage, source/retrieval metadata and checksums; publish atomically.
+- [x] Interrupted downloads resume without duplicate events; corrupt and incompatible caches are reported or rebuilt explicitly.
+- [x] Use user cache directories rather than source-relative locations; bounded raw chunks never become bulk Git additions.
 
 **Verification:** cargo test -p sectorline --locked --test cache; interrupted-write, wrong-year, wrong-type, checksum and read-only-directory tests.
 
 ### Checkpoint after T06
 
-- [ ] Focused tests and build pass; exercise the current end-to-end slice.
-- [ ] Record correctness/performance/visual evidence appropriate to this slice.
-- [ ] Review the milestone against its exit gate before expanding scope.
+- [x] Focused tests and build pass; exercise the current end-to-end slice.
+- [x] Record correctness/performance/visual evidence appropriate to this slice.
+- [x] Review the milestone against its exit gate before expanding scope.
+
+**Evidence:** Ten cache tests plus the HTTP resume integration verify checksum/schema/identity gates, atomic publication, partial-write recovery, process-exit locking, missing-only downloads and Windows read-only manifest failure. All 53 Rust tests, three Python tests, release builds and demo pass. The existing 151-chunk Monza acquisition was imported, resumed after a bounded metadata-read error, published and verified offline without network access. Raw chunks stay in the user cache outside Git. The checkpoint ends at acquisition/cache; T07–T09 still provide background loading and authentic playback. Legacy workspace lint debt remains unchanged.
 
 ## T07: Keep session loading off the UI thread
 

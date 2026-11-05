@@ -143,16 +143,57 @@ impl Channel {
             Self::Weather => "weather",
         }
     }
-    fn windowed(self) -> bool {
+    pub(crate) fn windowed(self) -> bool {
         matches!(self, Self::CarData | Self::Location | Self::Intervals)
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FieldIssue {
     pub row: usize,
     pub field: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChunkMetadata {
+    pub channel: Channel,
+    pub session_key: u32,
+    pub meeting_key: u32,
+    pub window: Option<Window>,
+    pub source_url: String,
+    #[serde(alias = "retrieved_at_utc_ms")]
+    pub retrieved_at: UtcMillis,
+    pub status: u16,
+    pub attempts: u32,
+}
+
+/// Restore returns previously verified data; accept journals a newly downloaded chunk.
+pub trait ChunkStore {
+    fn prepare(
+        &self,
+        _request: &AcquisitionRequest,
+        _channels: &[Channel],
+        _chunk_span: Duration,
+    ) -> Result<()> {
+        Ok(())
+    }
+    fn restore(
+        &mut self,
+        channel: Channel,
+        window: Option<Window>,
+    ) -> Result<Option<ValidatedChunk>>;
+    fn accept(&mut self, chunk: ValidatedChunk) -> Result<()>;
+}
+
+struct CallbackStore<F>(F);
+impl<F: FnMut(ValidatedChunk) -> Result<()>> ChunkStore for CallbackStore<F> {
+    fn restore(&mut self, _: Channel, _: Option<Window>) -> Result<Option<ValidatedChunk>> {
+        Ok(None)
+    }
+    fn accept(&mut self, chunk: ValidatedChunk) -> Result<()> {
+        (self.0)(chunk)
+    }
 }
 
 #[derive(Debug)]
@@ -171,6 +212,86 @@ pub struct ValidatedChunk {
     empty_reason: Option<String>,
 }
 impl ValidatedChunk {
+    pub fn metadata(&self) -> ChunkMetadata {
+        ChunkMetadata {
+            channel: self.channel,
+            session_key: self.session_key,
+            meeting_key: self.meeting_key,
+            window: self.window,
+            source_url: self.source_url.clone(),
+            retrieved_at: self.retrieved_at,
+            status: self.status,
+            attempts: self.attempts,
+        }
+    }
+    pub(crate) fn from_archive(
+        meta: ChunkMetadata,
+        raw: Vec<u8>,
+        request: &AcquisitionRequest,
+        drivers: &BTreeSet<u32>,
+    ) -> Result<Self> {
+        if meta.session_key != request.session_key
+            || meta.meeting_key != request.meeting_key
+            || !matches!(meta.status, 200 | 404)
+            || meta.attempts == 0
+            || meta.attempts > 9
+            || meta.retrieved_at.0 < 0
+        {
+            return Err("Invalid archived chunk identity or metadata".into());
+        }
+        let expected = source_url(
+            "https://api.openf1.org/v1",
+            request,
+            meta.channel,
+            meta.window,
+        )?;
+        // Local stub provenance is useful for tests, but never rewrite it to OpenF1.
+        let path = meta
+            .source_url
+            .strip_prefix("http://127.0.0.1:")
+            .and_then(|s| s.split_once('/'))
+            .filter(|(port, _)| port.parse::<u16>().is_ok())
+            .map(|(_, path)| path);
+        if meta.source_url != expected
+            && path != expected.strip_prefix("https://api.openf1.org/v1/")
+        {
+            return Err("Archived source URL does not match chunk query".into());
+        }
+        if raw.len() > 64 * 1024 * 1024 {
+            return Err("Archived chunk exceeds byte limit".into());
+        }
+        let mut records: Vec<Value> = if meta.status == 404 {
+            vec![]
+        } else {
+            serde_json::from_slice(&raw)?
+        };
+        if records.len() > 100_000 {
+            return Err("Archived chunk exceeds size/row limit".into());
+        }
+        let issues =
+            validation::validate(meta.channel, &mut records, request, meta.window, drivers)?;
+        let empty_reason = if meta.status == 404 {
+            Some("HTTP 404: no records for this query; endpoint support is not inferred".into())
+        } else if records.is_empty() {
+            Some("Provider returned an empty array for this query".into())
+        } else {
+            None
+        };
+        Ok(Self {
+            channel: meta.channel,
+            session_key: meta.session_key,
+            meeting_key: meta.meeting_key,
+            window: meta.window,
+            source_url: meta.source_url,
+            retrieved_at: meta.retrieved_at,
+            status: meta.status,
+            attempts: meta.attempts,
+            raw,
+            records,
+            issues,
+            empty_reason,
+        })
+    }
     pub fn channel(&self) -> Channel {
         self.channel
     }
@@ -267,8 +388,19 @@ impl OpenF1Client {
         request: &AcquisitionRequest,
         channels: &[Channel],
         cancel: &Cancellation,
-        mut sink: impl FnMut(ValidatedChunk) -> Result<()>,
+        sink: impl FnMut(ValidatedChunk) -> Result<()>,
     ) -> Result<AcquisitionSummary> {
+        self.acquire_with_store(request, channels, cancel, &mut CallbackStore(sink))
+    }
+
+    pub fn acquire_with_store(
+        &mut self,
+        request: &AcquisitionRequest,
+        channels: &[Channel],
+        cancel: &Cancellation,
+        store: &mut impl ChunkStore,
+    ) -> Result<AcquisitionSummary> {
+        store.prepare(request, channels, self.limits.chunk_span)?;
         if channels.first() != Some(&Channel::Drivers)
             || channels.iter().collect::<BTreeSet<_>>().len() != channels.len()
         {
@@ -292,7 +424,16 @@ impl OpenF1Client {
                 } else {
                     None
                 };
-                let chunk = self.chunk(request, channel, window, &drivers, cancel)?;
+                let restored = store.restore(channel, window)?;
+                let reused = restored.is_some();
+                let chunk = if let Some(chunk) = restored {
+                    if chunk.channel != channel || chunk.window != window {
+                        return Err("Restored chunk does not match request".into());
+                    }
+                    ValidatedChunk::from_archive(chunk.metadata(), chunk.raw, request, &drivers)?
+                } else {
+                    self.chunk(request, channel, window, &drivers, cancel)?
+                };
                 if channel == Channel::Drivers {
                     for row in chunk.records() {
                         let number =
@@ -314,7 +455,9 @@ impl OpenF1Client {
                     summary.empty_chunks += 1;
                 }
                 cancel.check()?;
-                sink(chunk)?;
+                if !reused {
+                    store.accept(chunk)?;
+                }
                 cancel.check()?;
                 match window {
                     Some(w) if w.end.0 < request.window.end.0 => cursor = w.end.0,
@@ -333,20 +476,7 @@ impl OpenF1Client {
         drivers: &BTreeSet<u32>,
         cancel: &Cancellation,
     ) -> Result<ValidatedChunk> {
-        let mut url = format!(
-            "{}/{}?session_key={}",
-            self.endpoint,
-            channel.endpoint(),
-            request.session_key
-        );
-        if let Some(w) = window {
-            // Operators are written as documented, not passed as equality-filter keys.
-            url.push_str(&format!(
-                "&date>={}&date<{}",
-                utc_query(w.start)?,
-                utc_query(w.end)?
-            ));
-        }
+        let url = source_url(&self.endpoint, request, channel, window)?;
         for attempt in 0..=self.limits.max_retries {
             cancel.check()?;
             if let Some(last) = self.last_request {
@@ -467,6 +597,26 @@ impl OpenF1Client {
 
 fn current_time() -> Result<UtcMillis> {
     Ok(UtcMillis(now_ms().map_err(|e| e.to_string())?))
+}
+fn source_url(
+    endpoint: &str,
+    request: &AcquisitionRequest,
+    channel: Channel,
+    window: Option<Window>,
+) -> Result<String> {
+    let mut url = format!(
+        "{endpoint}/{}?session_key={}",
+        channel.endpoint(),
+        request.session_key
+    );
+    if let Some(w) = window {
+        url.push_str(&format!(
+            "&date>={}&date<{}",
+            utc_query(w.start)?,
+            utc_query(w.end)?
+        ));
+    }
+    Ok(url)
 }
 fn utc_query(time: UtcMillis) -> Result<String> {
     Ok(DateTime::from_timestamp_millis(time.0)

@@ -619,3 +619,86 @@ fn acquisition_retry_after_http_date_and_excessive_delay_are_respected() {
     );
     assert_eq!(server.requests.lock().unwrap().len(), 1);
 }
+
+#[test]
+fn acquisition_resumes_cache_with_only_missing_http_chunks() {
+    use sectorline::data::{
+        cache::{CacheSpec, CacheWriter, SessionCache},
+        openf1::{ChunkStore, Result, ValidatedChunk},
+    };
+    struct StopAfterTwo<'a> {
+        writer: &'a mut CacheWriter,
+        cancel: &'a Cancellation,
+    }
+    impl ChunkStore for StopAfterTwo<'_> {
+        fn prepare(&self, r: &AcquisitionRequest, c: &[Channel], span: Duration) -> Result<()> {
+            self.writer.prepare(r, c, span)
+        }
+        fn restore(&mut self, c: Channel, w: Option<Window>) -> Result<Option<ValidatedChunk>> {
+            self.writer.restore(c, w)
+        }
+        fn accept(&mut self, chunk: ValidatedChunk) -> Result<()> {
+            self.writer.accept(chunk)?;
+            if self.writer.completed_chunks() == 2 {
+                self.cancel.cancel();
+            }
+            Ok(())
+        }
+    }
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../target")
+        .join(format!("http-cache-resume-{}", std::process::id()));
+    let channels = vec![Channel::Drivers, Channel::CarData];
+    let spec = CacheSpec::new(
+        9590,
+        1244,
+        2024,
+        ("Race", "Race"),
+        request().window(),
+        Duration::from_secs(1),
+        channels.clone(),
+    )
+    .unwrap();
+    let server = Server::new(vec![
+        Reply::json(json!([driver()])),
+        Reply::json(json!([car("1970-01-01T00:00:01Z")])),
+    ]);
+    let mut policy = limits();
+    policy.chunk_span = Duration::from_secs(1);
+    {
+        let mut writer = CacheWriter::begin(&root, &spec).unwrap();
+        let cancel = Cancellation::default();
+        let error = client(&server, policy.clone())
+            .acquire_with_store(
+                &request(),
+                &channels,
+                &cancel,
+                &mut StopAfterTwo {
+                    writer: &mut writer,
+                    cancel: &cancel,
+                },
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("cancelled"));
+    }
+    assert_eq!(server.requests.lock().unwrap().len(), 2);
+    let server = Server::new(vec![Reply::json(json!([car("1970-01-01T00:00:02Z")]))]);
+    let mut writer = CacheWriter::begin(&root, &spec).unwrap();
+    let mut wrong_policy = policy.clone();
+    wrong_policy.chunk_span = Duration::from_secs(2);
+    assert!(
+        client(&server, wrong_policy)
+            .acquire_with_store(&request(), &channels, &Cancellation::default(), &mut writer)
+            .unwrap_err()
+            .to_string()
+            .contains("settings")
+    );
+    assert!(server.requests.lock().unwrap().is_empty());
+    client(&server, policy)
+        .acquire_with_store(&request(), &channels, &Cancellation::default(), &mut writer)
+        .unwrap();
+    writer.finish().unwrap();
+    assert_eq!(server.requests.lock().unwrap().len(), 1);
+    assert_eq!(SessionCache::open(&root, &spec).unwrap().chunk_count(), 3);
+    std::fs::remove_dir_all(root).unwrap();
+}
