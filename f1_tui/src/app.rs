@@ -1,8 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 
-use crate::data::cache::SessionCache;
 use crate::loader::{LoaderEvent, session::SessionResult};
+use crate::replay::RecordedReplay;
 use crate::stream::TelemetryStream;
 use crate::ui;
 
@@ -39,7 +39,7 @@ pub struct App {
     pub load_id: Option<u64>,
     pub load_message: Option<String>,
     pub load_error: bool,
-    pub prepared_recording: Option<SessionCache>,
+    pub prepared_recording: Option<RecordedReplay>,
 }
 
 impl App {
@@ -78,6 +78,34 @@ impl App {
         }
         if key.code == KeyCode::Char('r') && !self.is_searching {
             return AppAction::RetryLoad;
+        }
+        if !self.show_session_modal
+            && let Some(replay) = &mut self.prepared_recording
+        {
+            match key.code {
+                KeyCode::Right | KeyCode::PageDown => {
+                    let step = if key.code == KeyCode::Right {
+                        1000
+                    } else {
+                        60_000
+                    };
+                    if let Err(error) = replay.advance_by(step) {
+                        self.load_message = Some(error.to_string());
+                        self.load_error = true;
+                    }
+                    return AppAction::None;
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    replay.select(-1);
+                    return AppAction::None;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    replay.select(1);
+                    return AppAction::None;
+                }
+                KeyCode::Char(' ' | '0' | '1' | '2' | '5') => return AppAction::None,
+                _ => {}
+            }
         }
         if self.show_session_modal {
             if self.is_searching {
@@ -225,6 +253,7 @@ impl App {
                 self.load_id = None;
                 match result {
                     Ok(SessionResult::Demo(stream)) => {
+                        self.prepared_recording = None;
                         self.stream = *stream;
                         self.load_message = Some("Generated demo ready".into());
                         self.load_error = false;
@@ -237,12 +266,12 @@ impl App {
                         self.selected_session_idx = 1;
                         self.show_session_modal = true;
                         self.load_message = Some(format!(
-                            "{count} catalogue matches. Enter prepares a recording; current display remains DEMO"
+                            "{count} catalogue matches. Enter opens recorded timing; previous view retained while loading"
                         ));
                     }
                     Ok(SessionResult::Recording(cache)) => {
-                        self.prepared_recording = Some(cache);
-                        self.load_message = Some("Recording cached and verified; recorded playback unavailable. Current display remains DEMO".into());
+                        self.prepared_recording = Some(*cache);
+                        self.load_message = Some("Recorded timing ready. Right steps 1s; PgDn steps 60s. Original delivery times unknown".into());
                         self.load_error = false;
                     }
                     Err(error) => {
@@ -255,7 +284,7 @@ impl App {
     }
 
     pub fn tick(&mut self, dt_ms: f64) {
-        if !self.show_session_modal {
+        if !self.show_session_modal && self.prepared_recording.is_none() {
             self.stream.tick(dt_ms);
         }
     }

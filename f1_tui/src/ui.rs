@@ -9,26 +9,31 @@ use crate::app::App;
 use crate::models::CarTelemetry;
 use crate::stream::TelemetryStream;
 use crate::track::CircuitRenderer;
+mod recorded;
 
 pub fn render(f: &mut Frame, app: &App) {
     let size = f.area();
-    let stream = &app.stream;
+    if let Some(replay) = &app.prepared_recording {
+        recorded::render(f, app, replay);
+    } else {
+        let stream = &app.stream;
 
-    // Vertical layout: Header (3) -> Main Body (Min 16) -> Cockpit Gauges (8) -> Footer (1)
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(16),
-            Constraint::Length(8),
-            Constraint::Length(1),
-        ])
-        .split(size);
+        // Vertical layout: Header (3) -> Main Body (Min 16) -> Cockpit Gauges (8) -> Footer (1)
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(16),
+                Constraint::Length(8),
+                Constraint::Length(1),
+            ])
+            .split(size);
 
-    render_header(f, chunks[0], stream);
-    render_main_body(f, chunks[1], stream);
-    render_cockpit_teleprinter(f, chunks[2], stream);
-    render_footer(f, chunks[3], stream);
+        render_header(f, chunks[0], stream);
+        render_main_body(f, chunks[1], stream);
+        render_cockpit_teleprinter(f, chunks[2], stream);
+        render_footer(f, chunks[3], stream);
+    }
 
     if app.show_session_modal {
         render_session_modal(f, app);
@@ -482,7 +487,7 @@ fn render_session_modal(f: &mut Frame, app: &App) {
         ])
         .split(inner_area);
 
-    let intro = Paragraph::new("Generated demo or recorded-session preparation. Current playback remains DEMO.")
+    let intro = Paragraph::new("Cached demo or recorded timing. Recorded timing uses explicit event-time estimates.")
         .style(Style::default().fg(Color::Rgb(170, 185, 205)))
         .alignment(Alignment::Center);
     f.render_widget(intro, modal_chunks[0]);

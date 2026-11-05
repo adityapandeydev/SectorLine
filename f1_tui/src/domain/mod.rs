@@ -7,6 +7,7 @@ use std::{
 };
 
 mod legacy;
+pub mod normalize;
 pub use legacy::{adapt_legacy_demo, parse_legacy_gap};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

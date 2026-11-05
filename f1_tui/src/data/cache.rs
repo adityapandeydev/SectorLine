@@ -59,6 +59,15 @@ impl CacheSpec {
     pub fn channels(&self) -> &[Channel] {
         &self.channels
     }
+    pub fn year(&self) -> u16 {
+        self.year
+    }
+    pub fn session_name(&self) -> &str {
+        &self.session_name
+    }
+    pub fn session_type(&self) -> &str {
+        &self.session_type
+    }
     pub fn chunk_span(&self) -> Duration {
         Duration::from_millis(self.chunk_ms)
     }
@@ -210,6 +219,22 @@ impl SessionCache {
     }
     pub fn chunk_count(&self) -> usize {
         self.manifest.entries.len()
+    }
+    pub fn chunk_metadata(&self, index: usize) -> Result<&ChunkMetadata> {
+        Ok(&self
+            .manifest
+            .entries
+            .get(index)
+            .ok_or("Chunk index outside recording")?
+            .metadata)
+    }
+    pub fn record_count(&self, channels: &[Channel]) -> usize {
+        self.manifest
+            .entries
+            .iter()
+            .filter(|e| channels.contains(&e.metadata.channel))
+            .map(|e| e.records)
+            .sum()
     }
     pub fn spec(&self) -> &CacheSpec {
         &self.manifest.spec

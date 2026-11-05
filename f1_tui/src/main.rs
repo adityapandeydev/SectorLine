@@ -35,8 +35,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("Sector Line - generated race demo");
-        println!("Current playback is generated, not observed telemetry or faithful historical replay.");
+        println!("Sector Line - recorded timing and generated demo");
+        println!("Generated demo playback is simulated. Recorded timing uses explicit event-time estimates.");
         println!("Usage: sectorline [--demo] [--gp NAME] [--year YYYY]");
         println!("  --demo, --headless  Run 20 generated frames without opening the TUI");
         println!("  --gp NAME           Generate a demo using historical session metadata (Python required)");
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("    --year YYYY --search TEXT --session ID  Filter metadata/select an exact ID offline");
         println!("    --catalogue-cache PATH  Override the user catalogue cache path");
         println!("Live access is unavailable; --live and --gp live are disabled.");
-        println!("Without options, open cached demo and catalogue search. Recordings are prepared in the background; playback remains demo-only.");
+        println!("Without options, open cached demo and catalogue search. Recordings open paused in the background; Right/PgDn step recorded time.");
         println!("  --recording-root PATH  Override the recording cache for the interactive loader");
         println!("  --prepare-session ID   Prepare an exact catalogue recording in the background");
         return Ok(());

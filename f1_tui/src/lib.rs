@@ -4,6 +4,7 @@ pub mod domain;
 pub mod live;
 pub mod loader;
 pub mod models;
+pub mod replay;
 pub mod stream;
 pub mod track;
 pub mod ui;

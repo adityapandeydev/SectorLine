@@ -1,6 +1,6 @@
 # Sector Line implementation plan
 
-Planning baseline: commit `65cb371`; 1 November 2026. Status: T01-T07 completed (baseline, honest modes, typed observations, catalogue, acquisition, offline cache and background session loading); T08-T24 remain planned. Task list: [todo.md](todo.md). Product scope: [../PRODUCT.md](../PRODUCT.md). UI contract: [../DESIGN.md](../DESIGN.md).
+Planning baseline: commit `65cb371`; 1 November 2026. Status: T01-T08 completed, including deterministic recorded-state normalization and a minimal paused timing view; T09-T24 remain planned. Task list: [todo.md](todo.md). Product scope: [../PRODUCT.md](../PRODUCT.md). UI contract: [../DESIGN.md](../DESIGN.md).
 
 ## Outcome and release boundary
 

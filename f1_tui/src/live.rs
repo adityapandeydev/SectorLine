@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
 
-pub const LIVE_UNAVAILABLE: &str = "Live access is unavailable. Sector Line currently provides generated demos only; authentic replay and live ingestion are not implemented.";
+pub const LIVE_UNAVAILABLE: &str = "Live access is unavailable. Sector Line provides generated demos and historical recorded timing; live ingestion is not implemented.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiveSessionStatus {

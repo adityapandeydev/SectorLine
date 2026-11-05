@@ -1,8 +1,9 @@
 # Sector Line
 
-An experimental Rust terminal race dashboard. Current playback is a **generated
-demo**, using a mixture of historical metadata and simulated car movement,
-telemetry, gaps, and conditions. It is not observed race replay.
+An experimental Rust terminal race dashboard with a generated demo and an initial
+recorded timing view backed by OpenF1 historical data. Recorded timing uses explicit
+event-time estimates and starts paused. The demo's simulated movement, telemetry,
+gaps and conditions remain clearly labelled DEMO.
 
 ## Run from this directory
 
@@ -21,14 +22,15 @@ The cached demo runs without Python. Historical extraction through
 ## Current status
 
 Starting without options opens the cached demo and session catalogue selector. `--demo` (or
-`--headless`) runs 20 generated frames without opening the TUI. All current
-sessions, including those generated through `--gp` and `--year`, remain demos.
+`--headless`) runs 20 generated frames without opening the TUI. Sessions generated
+through `--gp` and `--year` remain demos. Catalogue recordings open the separate
+RECORDED SNAPSHOT view.
 
 **Live access is unavailable.** `--live` and `--gp live` exit with an explanation
 before loading a cache or contacting a provider. The Python bridge also rejects
 live requests, and failed historical extraction cannot fall back to the latest
-OpenF1 session. Faithful historical replay and authenticated live ingestion
-remain future work.
+OpenF1 session. Continuous replay, full race semantics and authenticated live
+ingestion remain future work.
 
 ## Completed-session catalogue
 
@@ -47,11 +49,11 @@ the cached catalogue offline. The default path is
 `$XDG_CACHE_HOME/sectorline/catalogue.json` / `~/.cache/sectorline/catalogue.json`
 on Unix. Override it with `--catalogue-cache PATH`.
 
-This command browses **metadata**, independently of the existing demo selector.
+This command browses **metadata**. Use the TUI selector or `--prepare-session ID`
+to load recorded timing.
 It reports cancellation, missing completion timestamps, and sessions that have not
 ended. A completed session does not guarantee telemetry coverage. Selecting an ID
-does not download or play a recording yet; those tasks follow next. See
-[catalogue behavior and verification](docs/catalogue.md).
+through `--catalogue --session` only selects metadata; it does not start a download.
 
 ## Real-data acquisition (developer harness)
 
@@ -96,8 +98,8 @@ explicitly while preserving the existing files.
 Existing T05 scratch downloads can be imported with `--import SCRATCH_DIR`; raw
 responses are revalidated and hashed, rather than trusting the saved normalized
 JSON. Import resumes when repeated. The recording covers the requested time range,
-including explicit empty queries; source gaps remain gaps. Cache completion does
-not yet enable TUI replay—that integration follows T07–T09.
+including explicit empty queries; source gaps remain gaps. A completed cache
+opens the manual recorded timing view through the TUI loader.
 
 No public release or data redistribution license is configured.
 
@@ -123,6 +125,28 @@ cargo run --release --locked -p sectorline -- --prepare-session 9590
 
 Use `--catalogue-cache PATH` and `--recording-root PATH` to override user cache paths.
 Preparation has a 15-minute job deadline; retry resumes saved chunks. A ready
-recording is retained for the next replay stage. **The displayed dashboard remains
-DEMO until T08–T09 implement recorded playback.** The selector's generated option
-opens the bundled cached demo; legacy `--gp` extraction remains a startup CLI path.
+recording opens **RECORDED SNAPSHOT / PAUSED**. `Right` advances one second and
+`Page Down` advances 60 seconds; Up/Down selects a driver. T09 adds continuous
+playback. The selector's generated option opens the bundled cached demo; legacy
+`--gp` extraction remains a startup CLI path.
+
+Recorded values use the latest eligible source observation, with its age shown.
+Missing, quarantined and ambiguous values remain `--`; unknown DRS codes stay
+visible. Retrieval time never stands in for original availability. The view says
+when it uses event-time estimates because original delivery timing is unknown.
+The timeline begins at the earliest retained core observation, including pre-session
+records; it does not claim that instant is lights-out. Lap sectors, tyres, flags,
+weather and geometry await their later semantics tasks.
+
+Same-time records resolve deterministically by channel/driver and retrieval time.
+Tied conflicting revisions become unavailable. Exact historical revision timing
+cannot be reconstructed from today's provider snapshot. Raw provenance remains
+in the cache. Core event allocation is capped at 192 MiB; oversized coverage fails
+explicitly instead of exhausting memory. No resampling or interpolation is added.
+
+For an offline full-recording check against raw telemetry:
+
+```powershell
+cargo run --release --locked -p sectorline --example replay_check -- `
+  "$env:LOCALAPPDATA\sectorline\catalogue.json" 9590
+```

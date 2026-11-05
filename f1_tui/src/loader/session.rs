@@ -1,5 +1,6 @@
 //! Real session preparation and catalogue search, executed only on the loader worker.
 use super::Loader;
+use crate::replay::RecordedReplay;
 use crate::{
     app::SessionOption,
     data::{
@@ -23,7 +24,7 @@ pub enum SessionRequest {
 pub enum SessionResult {
     Demo(Box<TelemetryStream>),
     Search(Vec<SessionOption>),
-    Recording(SessionCache),
+    Recording(Box<RecordedReplay>),
 }
 pub struct WorkerConfig {
     pub demo_dir: PathBuf,
@@ -94,9 +95,10 @@ fn prepare(
                 year: s.session.year as u32,
                 session_type: s.session.session_type.clone(),
                 badge: "RECORDING".into(),
-                subtitle: s.unavailable_reason.clone().unwrap_or_else(|| {
-                    "Prepare an offline recording; replay not yet available".into()
-                }),
+                subtitle: s
+                    .unavailable_reason
+                    .clone()
+                    .unwrap_or_else(|| "Open recorded timing; event-time estimates".into()),
                 recording_key: Some(s.session.session_key),
                 unavailable_reason: s.unavailable_reason,
             })
@@ -121,13 +123,14 @@ fn prepare(
         Channel::ALL.to_vec(),
     )?;
     let verifying = |n, total| progress(format!("Verifying recording: {n}/{total} chunks"));
+    let title = format!(
+        "{} {} | {} | #{}",
+        selection.session.year, selection.meeting.meeting_name, selection.session.session_name, key
+    );
     if SessionCache::exists(&config.recording_root, &spec) {
-        return Ok(SessionResult::Recording(SessionCache::open_cancellable(
-            &config.recording_root,
-            &spec,
-            cancel,
-            &verifying,
-        )?));
+        let cache =
+            SessionCache::open_cancellable(&config.recording_root, &spec, cancel, &verifying)?;
+        return normalized(&cache, title, cancel, progress);
     }
     progress("Opening resumable download; the previous session stays usable".into());
     let mut writer =
@@ -151,9 +154,21 @@ fn prepare(
             },
         )?;
     cancel.check()?;
-    Ok(SessionResult::Recording(
-        writer.finish_cancellable(cancel, &verifying)?,
-    ))
+    let cache = writer.finish_cancellable(cancel, &verifying)?;
+    normalized(&cache, title, cancel, progress)
+}
+fn normalized(
+    cache: &SessionCache,
+    title: String,
+    cancel: &Cancellation,
+    progress: &dyn Fn(String),
+) -> Result<SessionResult> {
+    progress("Normalizing recorded observations and ordering timeline".into());
+    let replay = RecordedReplay::from_cache(cache, title, cancel, &|n, total| {
+        progress(format!("Normalizing recorded data: {n}/{total} chunks"))
+    })?;
+    cancel.check()?;
+    Ok(SessionResult::Recording(Box::new(replay)))
 }
 struct ReportingStore<'a> {
     writer: &'a mut CacheWriter,

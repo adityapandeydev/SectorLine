@@ -1,6 +1,6 @@
 # Sector Line implementation tasks
 
-Status: T01-T07 completed; T08-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
+Status: T01-T08 completed; T09-T24 remain planned. Scope confirmed: free historical replay first, live later. Follow [plan.md](plan.md) and [../DESIGN.md](../DESIGN.md). Each task should be one reviewable change; do not mix visual redesign with data rewrites. Proposed new file paths may be adjusted without changing boundaries or acceptance criteria.
 
 ## T01: Establish real-data and performance baselines
 
@@ -142,7 +142,7 @@ Status: T01-T07 completed; T08-T24 remain planned. Scope confirmed: free histori
 
 ## T08: Normalize observations into deterministic session state
 
-- [ ] Complete T08.
+- [x] Complete T08.
 
 **Dependencies:** T03,T06. **Scope:** M (at most five likely files).
 
@@ -150,11 +150,13 @@ Status: T01-T07 completed; T08-T24 remain planned. Scope confirmed: free histori
 
 **Acceptance criteria:**
 
-- [ ] Convert UTC samples into one elapsed-session timeline with explicit same-time ordering, deduplication and correction policy.
-- [ ] State at T uses only fields available by T, with provider/event/retrieval times kept distinct.
-- [ ] One complete race drives a minimal actual-data timing view; unknown fields remain unknown.
+- [x] Convert UTC samples into one elapsed-session timeline with explicit same-time ordering, deduplication and correction policy.
+- [x] State at T uses only fields available by T, with provider/event/retrieval times kept distinct.
+- [x] One complete race drives a minimal actual-data timing view; unknown fields remain unknown.
 
 **Verification:** cargo test -p sectorline --locked --test reducer; compare selected timestamps to raw fixture observations, including future-leakage cases.
+
+**Evidence:** Eleven reducer/UI tests and small attributed Monza excerpts cover availability boundaries, explicit event-time estimates, unknown timing, duplicate/correction rules, same-time ambiguity, missing/zero, sub-millisecond rounding, future-sector suppression and independent raw-data comparisons. Full Monza cache: 1,218,026 core events/20 drivers; six telemetry fields match raw time-filtered records at four recording checkpoints. Release check sampled peak resident memory 171,749,376 bytes (50 ms sampling; not a full UI benchmark). Recorded timing renders at 144x44/120x36/80x24 and was manually stepped in the actual Windows PTY, with terminal restoration. All 70 Rust tests, three Python tests, release build and generated demo pass. T08 recorded timing is paused with Right/PgDn steps; continuous clock remains T09. Original delivery/revision timing is explicitly unknown, with lap/stint semantics withheld until their later tasks.
 
 ## T09: Drive replay using timestamps
 
