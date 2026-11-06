@@ -175,6 +175,15 @@ fn observed<T>(value: T) -> Observation<T> {
 fn recorded_sample() -> CarSample {
     CarSample {
         driver: DriverId::new(session(), 4).unwrap(),
+        lap_eligibility: observed(timing::Eligibility::Eligible),
+        lap_number: observed(NonZeroU32::new(1).unwrap()),
+        lap_time: observed(Seconds::new(90.0).unwrap()),
+        personal_best: observed(timing::BestLap {
+            number: NonZeroU32::new(1).unwrap(),
+            duration: Seconds::new(90.0).unwrap(),
+            eligibility: timing::Eligibility::Eligible,
+        }),
+        status: observed(classification::DriverStatus::Retired),
         position: observed(NonZeroU32::new(1).unwrap()),
         speed_kmh: observed(SpeedKmh::new(200.0).unwrap()),
         rpm: observed(Rpm(11_000)),

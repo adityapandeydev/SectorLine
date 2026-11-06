@@ -41,6 +41,7 @@ fn main() -> Result<()> {
     };
     let cache = SessionCache::open(&root, &spec)?;
     let timeline = Timeline::from_cache(&cache, &Cancellation::default(), &|_, _| {})?;
+    verify_completed_laps(&cache, &timeline)?;
     let end = timeline.end().0;
     let targets = [end / 4, end / 2, end * 3 / 4, end];
     // Four small oracle maps, fed by raw source JSON rather than reducer events.
@@ -112,7 +113,14 @@ fn main() -> Result<()> {
                 sample.drs.value().map(|v| v.0 as f64),
                 number("drs").filter(|v| *v >= 0.0 && v.fract() == 0.0)
             );
-            assert!(sample.sectors.iter().all(|s| s.value().is_none()));
+            for sector in &sample.sectors {
+                if sector.value().is_some() {
+                    assert!(
+                        sector.timing().observed_at.unwrap().0
+                            <= timeline.origin().0 + target as i64
+                    );
+                }
+            }
         }
         println!(
             "Verified UTC {}: {} drivers, all core telemetry fields match eligible raw records",
@@ -211,6 +219,175 @@ fn main() -> Result<()> {
     );
     println!(
         "Full recorded traversal passed: {ticks} irregular fake-clock ticks at 20x; end stayed fixed, deliberate restart reset state."
+    );
+    Ok(())
+}
+
+/// Independent raw archive oracle for completion, last lap, sectors and provisional best.
+fn verify_completed_laps(cache: &SessionCache, timeline: &Timeline) -> Result<()> {
+    use serde_json::Value;
+    let mut laps = Vec::<Value>::new();
+    let mut controls = Vec::<Value>::new();
+    for i in 0..cache.chunk_count() {
+        let channel = cache.chunk_metadata(i)?.channel;
+        if matches!(channel, Channel::Laps | Channel::RaceControl) {
+            let chunk = cache.read_chunk(i)?;
+            let rows: Vec<Value> = serde_json::from_slice(chunk.raw_bytes())?;
+            if channel == Channel::Laps {
+                laps.extend(rows);
+            } else {
+                controls.extend(rows);
+            }
+        }
+    }
+    let stamp = |text: &str| -> i64 {
+        let d = chrono::DateTime::parse_from_rfc3339(text).unwrap();
+        d.timestamp_millis() + i64::from(!d.timestamp_subsec_nanos().is_multiple_of(1_000_000))
+    };
+    let completion = |r: &Value| -> Option<i64> {
+        let start = r["date_start"].as_str().map(&stamp);
+        let sectors = (1..=3)
+            .map(|i| {
+                r[format!("duration_sector_{i}")]
+                    .as_f64()
+                    .filter(|v| *v > 0.0)
+            })
+            .collect::<Option<Vec<_>>>()
+            .map(|v| v.iter().sum::<f64>());
+        let duration = r["lap_duration"]
+            .as_f64()
+            .filter(|v| *v > 0.0)
+            .into_iter()
+            .chain(sectors)
+            .reduce(f64::max);
+        let inferred = start
+            .zip(duration)
+            .map(|(s, d)| s + (d * 1000.0).ceil() as i64);
+        let next = laps
+            .iter()
+            .find(|n| {
+                n["driver_number"] == r["driver_number"]
+                    && n["lap_number"].as_u64() == r["lap_number"].as_u64().map(|n| n + 1)
+            })
+            .and_then(|r| r["date_start"].as_str())
+            .map(&stamp);
+        inferred.into_iter().chain(next).max()
+    };
+    let origin = timeline.origin().0;
+    let end = timeline.end().0;
+    let mut targets = vec![end / 4, end / 2, end * 3 / 4, end];
+    // Check just before and at each named deletion, not merely the final result.
+    for r in &controls {
+        if r["message"]
+            .as_str()
+            .is_some_and(|s| s.contains(" DELETED - "))
+        {
+            let t = stamp(r["date"].as_str().unwrap()) - origin;
+            if t > 0 {
+                targets.extend([t as u64 - 1, t as u64]);
+            }
+        }
+    }
+    for target in &targets {
+        let utc = origin + *target as i64;
+        let frame = timeline
+            .state_at(ElapsedMillis(*target), ReplayPolicy::EventTimeEstimates)?
+            .frame(timeline)?;
+        let mut deleted = std::collections::BTreeSet::new();
+        for control in &controls {
+            if stamp(control["date"].as_str().unwrap()) > utc {
+                continue;
+            }
+            let message = control["message"].as_str().unwrap_or("");
+            let words = message.split_whitespace().collect::<Vec<_>>();
+            if words.first() != Some(&"CAR") {
+                continue;
+            }
+            let driver = words.get(1).and_then(|n| n.parse::<u32>().ok());
+            let lap = words
+                .iter()
+                .rposition(|w| *w == "LAP")
+                .and_then(|i| words.get(i + 1))
+                .and_then(|n| n.parse::<u32>().ok());
+            if let (Some(driver), Some(lap)) = (driver, lap) {
+                if message.contains(" DELETED - ") {
+                    deleted.insert((driver, lap));
+                } else if message.contains(" REINSTATED") {
+                    deleted.remove(&(driver, lap));
+                }
+            }
+        }
+        for car in frame.samples() {
+            let driver = car.driver.number.get();
+            let completed = laps
+                .iter()
+                .filter(|r| {
+                    r["driver_number"].as_u64() == Some(driver as u64)
+                        && completion(r).is_some_and(|t| t <= utc)
+                })
+                .collect::<Vec<_>>();
+            let latest = completed.iter().max_by_key(|r| r["lap_number"].as_u64());
+            assert_eq!(
+                car.lap_number.value().map(|n| n.get() as u64),
+                latest.and_then(|r| r["lap_number"].as_u64())
+            );
+            let consistent = |r: &Value| {
+                let sum = (1..=3)
+                    .map(|i| r[format!("duration_sector_{i}")].as_f64())
+                    .collect::<Option<Vec<_>>>()
+                    .map(|s| s.iter().sum::<f64>());
+                r["lap_duration"]
+                    .as_f64()
+                    .zip(sum)
+                    .is_none_or(|(d, s)| (d - s).abs() <= 0.01)
+            };
+            assert_eq!(
+                car.lap_time.value().map(|v| v.get()),
+                latest
+                    .filter(|r| consistent(r))
+                    .and_then(|r| r["lap_duration"].as_f64().filter(|v| *v > 0.0))
+            );
+            for (i, sector) in car.sectors.iter().enumerate() {
+                assert_eq!(
+                    sector.value().map(|v| v.get()),
+                    latest.and_then(|r| r[format!("duration_sector_{}", i + 1)]
+                        .as_f64()
+                        .filter(|v| *v > 0.0))
+                );
+            }
+            let best = completed
+                .into_iter()
+                .filter(|r| {
+                    consistent(r)
+                        && r["is_pit_out_lap"].as_bool() == Some(false)
+                        && r["lap_duration"].as_f64().is_some_and(|v| v > 0.0)
+                        && !deleted.contains(&(driver, r["lap_number"].as_u64().unwrap() as u32))
+                })
+                .min_by(|a, b| {
+                    a["lap_duration"]
+                        .as_f64()
+                        .unwrap()
+                        .total_cmp(&b["lap_duration"].as_f64().unwrap())
+                        .then_with(|| a["lap_number"].as_u64().cmp(&b["lap_number"].as_u64()))
+                });
+            assert_eq!(
+                car.personal_best
+                    .value()
+                    .map(|b| (b.number.get() as u64, b.duration.get())),
+                best.map(|b| (
+                    b["lap_number"].as_u64().unwrap(),
+                    b["lap_duration"].as_f64().unwrap()
+                ))
+            );
+            assert!(
+                car.status.value().is_none(),
+                "No timestamped explicit retirement result expected in this Monza fixture"
+            );
+        }
+    }
+    println!(
+        "Verified {} full-race timing checkpoints against raw laps and named deletion messages: completed lap, sectors, provisional personal best and withheld final status.",
+        targets.len()
     );
     Ok(())
 }

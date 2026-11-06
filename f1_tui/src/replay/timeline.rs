@@ -10,6 +10,7 @@ use crate::{
         *,
     },
 };
+mod lap_state;
 use std::sync::Arc;
 use std::{cmp::Ordering, collections::BTreeMap, num::NonZeroU32};
 
@@ -153,6 +154,8 @@ impl Timeline {
             Channel::CarData,
             Channel::Location,
             Channel::Intervals,
+            Channel::Laps,
+            Channel::RaceControl,
         ];
         let count = cache.record_count(&channels);
         let event_bytes = count
@@ -167,6 +170,7 @@ impl Timeline {
             .map_err(|_| "Cannot allocate the recorded timeline within available memory")?;
         let mut sources = Vec::new();
         let mut drivers = Vec::new();
+        let mut control = Vec::new();
         for index in 0..cache.chunk_count() {
             cancel.check()?;
             let meta = cache.chunk_metadata(index)?;
@@ -174,14 +178,32 @@ impl Timeline {
                 drivers = normalize::roster(&cache.read_chunk(index)?)?;
             } else if channels.contains(&meta.channel) && meta.status == 200 {
                 let chunk = cache.read_chunk(index)?;
-                normalize::append(&chunk, sources.len().try_into()?, &mut events)?;
+                let source = sources.len().try_into()?;
                 sources.push(chunk.metadata());
+                if meta.channel == Channel::RaceControl {
+                    control.push((source, chunk));
+                } else {
+                    normalize::append(&chunk, source, &mut events)?;
+                }
             }
             progress(index + 1, cache.chunk_count());
+        }
+        for (source, chunk) in control {
+            cancel.check()?;
+            normalize::append_control(&chunk, source, &drivers, &mut events)?;
         }
         cancel.check()?;
         let origin = events
             .iter()
+            .filter(|e| {
+                matches!(
+                    e.payload,
+                    Payload::Position(_)
+                        | Payload::Telemetry(_)
+                        | Payload::Location(_)
+                        | Payload::Intervals { .. }
+                )
+            })
             .map(|e| e.observed)
             .min()
             .ok_or("Recording has no timestamped core observations")?;
@@ -222,7 +244,9 @@ impl Timeline {
             elapsed: ElapsedMillis(0),
             policy,
             next: 0,
-            drivers: self.drivers.iter().map(|d| (d.number, [None; 4])).collect(),
+            laps: BTreeMap::new(),
+            decisions: BTreeMap::new(),
+            drivers: self.drivers.iter().map(|d| (d.number, [None; 6])).collect(),
         };
         state.advance_to(self, time)?;
         Ok(state)
@@ -250,15 +274,22 @@ fn channel_index(channel: Channel) -> usize {
         Channel::CarData => 1,
         Channel::Location => 2,
         Channel::Intervals => 3,
+        Channel::Laps => 4,
+        Channel::RaceControl => 5,
         _ => unreachable!("core channel"),
     }
 }
-fn event_key(event: &Event) -> ((i64, u8), i64, usize, NonZeroU32) {
+fn event_key(event: &Event) -> ((i64, u8), i64, usize, NonZeroU32, u32) {
     (
         availability_key(event.available),
         event.observed.0,
         channel_index(event.payload.channel()),
         event.driver,
+        match &event.payload {
+            Payload::Lap(v) => v.number.get(),
+            Payload::LapDecision { lap, .. } => lap.get(),
+            _ => 0,
+        },
     )
 }
 
@@ -268,7 +299,9 @@ pub struct SessionState {
     elapsed: ElapsedMillis,
     policy: ReplayPolicy,
     next: usize,
-    drivers: BTreeMap<NonZeroU32, [Option<usize>; 4]>,
+    drivers: BTreeMap<NonZeroU32, [Option<usize>; 6]>,
+    laps: BTreeMap<(NonZeroU32, u32), usize>,
+    decisions: BTreeMap<(NonZeroU32, u32), usize>,
 }
 impl SessionState {
     pub fn elapsed(&self) -> ElapsedMillis {
@@ -298,19 +331,29 @@ impl SessionState {
                 break;
             }
             if self.policy.permits(event.available, utc) {
-                let slot = &mut self
-                    .drivers
-                    .get_mut(&event.driver)
-                    .ok_or("State roster mismatch")?[channel_index(event.payload.channel())];
-                let newer = slot.is_none_or(|old| {
-                    let old = &timeline.events[old];
-                    event.observed > old.observed
-                        || (event.observed == old.observed
-                            && timeline.sources[event.source as usize].retrieved_at
-                                >= timeline.sources[old.source as usize].retrieved_at)
-                });
-                if newer {
-                    *slot = Some(self.next);
+                let map = match &event.payload {
+                    Payload::Lap(lap) => Some((&mut self.laps, lap.number.get())),
+                    Payload::LapDecision { lap, .. } => Some((&mut self.decisions, lap.get())),
+                    _ => None,
+                };
+                if let Some((map, lap)) = map {
+                    let key = (event.driver, lap);
+                    let old = map.get(&key).copied();
+                    if old.is_none_or(|i| {
+                        availability_key(event.available)
+                            >= availability_key(timeline.events[i].available)
+                    }) {
+                        map.insert(key, self.next);
+                    }
+                } else {
+                    let slot = &mut self
+                        .drivers
+                        .get_mut(&event.driver)
+                        .ok_or("State roster mismatch")?[channel_index(event.payload.channel())];
+                    let old = *slot;
+                    if newer_event(timeline, old, event) {
+                        *slot = Some(self.next);
+                    }
                 }
             }
             self.next += 1;
@@ -339,6 +382,8 @@ impl SessionState {
                 Some(Payload::Position(v)) => *v,
                 _ => None,
             };
+            let completed = self.completed_laps(timeline, driver)?;
+            let status = slots[5].map(|i| &timeline.events[i]);
             cars.push(CarSample {
                 driver: DriverId::new(timeline.session.clone(), driver.get())?,
                 position: observation(timeline, position, pos, "position")?,
@@ -365,11 +410,20 @@ impl SessionState {
                 drs: observation(timeline, telemetry, values.and_then(|v| v.drs), "car_data")?,
                 gap_to_leader: observation(timeline, intervals, leader, "intervals")?,
                 gap_to_ahead: observation(timeline, intervals, ahead, "intervals")?,
-                sectors: [
-                    observation(timeline, None, None, "laps")?,
-                    observation(timeline, None, None, "laps")?,
-                    observation(timeline, None, None, "laps")?,
-                ],
+                lap_eligibility: completed.eligibility,
+                lap_number: completed.number,
+                lap_time: completed.duration,
+                personal_best: completed.best,
+                status: observation(
+                    timeline,
+                    status,
+                    status.and_then(|e| match e.payload {
+                        Payload::Status(v) => Some(v),
+                        _ => None,
+                    }),
+                    "race_control",
+                )?,
+                sectors: completed.sectors,
             });
         }
         cars.sort_by_key(|c| {
@@ -401,6 +455,15 @@ impl SessionState {
                 _ => None,
             })
     }
+}
+fn newer_event(timeline: &Timeline, old: Option<usize>, event: &Event) -> bool {
+    old.is_none_or(|old| {
+        let old = &timeline.events[old];
+        event.observed > old.observed
+            || (event.observed == old.observed
+                && timeline.sources[event.source as usize].retrieved_at
+                    >= timeline.sources[old.source as usize].retrieved_at)
+    })
 }
 fn observation<T>(
     timeline: &Timeline,

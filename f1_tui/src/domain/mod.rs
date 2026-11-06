@@ -6,8 +6,10 @@ use std::{
     num::{NonZeroU16, NonZeroU32},
 };
 
+pub mod classification;
 mod legacy;
 pub mod normalize;
+pub mod timing;
 pub use legacy::{adapt_legacy_demo, parse_legacy_gap};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -402,11 +404,30 @@ pub struct CarSample {
     pub gap_to_leader: Observation<Gap>,
     pub gap_to_ahead: Observation<Gap>,
     pub sectors: [Observation<Seconds>; 3],
+    pub lap_number: Observation<NonZeroU32>,
+    pub lap_time: Observation<Seconds>,
+    pub lap_eligibility: Observation<timing::Eligibility>,
+    pub personal_best: Observation<timing::BestLap>,
+    pub status: Observation<classification::DriverStatus>,
 }
 impl CarSample {
     fn validate_for(&self, mode: PlaybackMode, session: &SessionId) -> Result<(), ContractError> {
         if &self.driver.session != session {
             return Err(ContractError("driver belongs to another session"));
+        }
+        self.lap_number.validate_for(mode, session)?;
+        self.lap_time.validate_for(mode, session)?;
+        self.lap_eligibility.validate_for(mode, session)?;
+        self.personal_best.validate_for(mode, session)?;
+        self.status.validate_for(mode, session)?;
+        if self.lap_time.value().is_some_and(|v| v.get() <= 0.0)
+            || self.personal_best.value().is_some_and(|v| {
+                v.duration.get() <= 0.0 || v.eligibility == timing::Eligibility::Ineligible
+            })
+        {
+            return Err(ContractError(
+                "Invalid completed/best lap duration or eligibility",
+            ));
         }
         self.position.validate_for(mode, session)?;
         self.speed_kmh.validate_for(mode, session)?;
@@ -481,6 +502,18 @@ impl PlaybackFrame {
     }
     pub fn samples(&self) -> &[CarSample] {
         &self.samples
+    }
+    /// Smallest admitted personal best; Unknown eligibility remains provisional.
+    pub fn session_best(&self) -> Option<(NonZeroU32, &timing::BestLap)> {
+        self.samples
+            .iter()
+            .filter_map(|s| s.personal_best.value().map(|b| (s.driver.number, b)))
+            .min_by(|a, b| {
+                a.1.duration
+                    .get()
+                    .total_cmp(&b.1.duration.get())
+                    .then_with(|| a.0.cmp(&b.0))
+            })
     }
     pub fn into_recorded(self) -> Result<Self, ContractError> {
         Self::new(

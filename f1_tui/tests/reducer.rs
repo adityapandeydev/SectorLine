@@ -377,10 +377,21 @@ fn reducer_real_monza_excerpts_match_independent_time_filtered_oracle() {
             if let Some(row) = expected {
                 assert_eq!(sample.drs.value().map(|d| d.0 as u64), row["drs"].as_u64());
             }
-            assert!(
-                sample.sectors.iter().all(|sector| sector.value().is_none()),
-                "Retrospective lap summaries must not become early sectors"
+            let laps = raw["channels"][5]["rows"].as_array().unwrap();
+            let expected = expected_completed_lap(laps, sample.driver.number.get() as u64, at);
+            assert_eq!(
+                sample.lap_number.value().map(|n| n.get() as u64),
+                expected.and_then(|r| r["lap_number"].as_u64())
             );
+            for (index, sector) in sample.sectors.iter().enumerate() {
+                assert_eq!(
+                    sector.value().map(|v| v.get()),
+                    expected.and_then(|r| r[format!("duration_sector_{}", index + 1)].as_f64())
+                );
+                if sector.value().is_some() {
+                    assert!(sector.timing().observed_at.unwrap().0 <= at);
+                }
+            }
         }
     }
 }
@@ -538,4 +549,46 @@ fn reducer_raw_fractional_time_integral_floats_and_quarantine_survive_cache_norm
     assert_eq!(car.gear.value().unwrap().get(), 5);
     assert_eq!(car.drs.value().unwrap().0, 9);
     assert!(car.throttle.value().is_none() && car.brake.value().is_none());
+}
+
+// Independent raw-row completion oracle; no normalized events or reducer helpers.
+fn expected_completed_lap(
+    rows: &[serde_json::Value],
+    driver: u64,
+    at: i64,
+) -> Option<&serde_json::Value> {
+    rows.iter()
+        .filter(|r| r["driver_number"].as_u64() == Some(driver))
+        .filter(|r| {
+            let start = r["date_start"]
+                .as_str()
+                .and_then(|v| chrono::DateTime::parse_from_rfc3339(v).ok())
+                .map(|v| v.timestamp_millis());
+            let sectors = (1..=3)
+                .map(|i| r[format!("duration_sector_{i}")].as_f64())
+                .collect::<Option<Vec<_>>>()
+                .map(|v| v.iter().sum::<f64>());
+            let duration = r["lap_duration"]
+                .as_f64()
+                .into_iter()
+                .chain(sectors)
+                .reduce(f64::max);
+            let end = start
+                .zip(duration)
+                .map(|(s, d)| s + (d * 1000.0).ceil() as i64);
+            let next = rows
+                .iter()
+                .find(|n| {
+                    n["driver_number"] == r["driver_number"]
+                        && n["lap_number"].as_u64() == r["lap_number"].as_u64().map(|n| n + 1)
+                })
+                .and_then(|n| n["date_start"].as_str())
+                .and_then(|v| chrono::DateTime::parse_from_rfc3339(v).ok())
+                .map(|v| v.timestamp_millis());
+            end.into_iter()
+                .chain(next)
+                .max()
+                .is_some_and(|end| end <= at)
+        })
+        .max_by_key(|r| r["lap_number"].as_u64())
 }

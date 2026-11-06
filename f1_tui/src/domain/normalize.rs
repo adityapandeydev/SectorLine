@@ -1,8 +1,11 @@
-//! Core recorded samples. Lap/stint summaries are deliberately not timing events yet.
+//! Timestamped core samples and conservative completed-lap summaries.
 use super::*;
 use crate::data::openf1::{Channel, Result, ValidatedChunk};
 use chrono::DateTime;
 use serde_json::Value;
+mod laps;
+pub(crate) use laps::append_control;
+pub use laps::control_decision;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RosterDriver {
@@ -55,6 +58,12 @@ impl Coordinates {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Payload {
     Position(Option<NonZeroU32>),
+    Lap(Box<timing::LapTiming>),
+    LapDecision {
+        lap: NonZeroU32,
+        eligibility: timing::Eligibility,
+    },
+    Status(classification::DriverStatus),
     Telemetry(TelemetryValues),
     Location(Coordinates),
     Intervals {
@@ -66,6 +75,8 @@ impl Payload {
     pub fn channel(&self) -> Channel {
         match self {
             Self::Position(_) => Channel::Position,
+            Self::Lap(_) => Channel::Laps,
+            Self::LapDecision { .. } | Self::Status(_) => Channel::RaceControl,
             Self::Telemetry(_) => Channel::CarData,
             Self::Location(_) => Channel::Location,
             Self::Intervals { .. } => Channel::Intervals,
@@ -89,6 +100,9 @@ impl Event {
         source: u32,
         payload: Payload,
     ) -> Result<Self> {
+        if let Payload::Lap(lap) = &payload {
+            lap.validate()?;
+        }
         if matches!(available,Availability::Known(t)|Availability::Estimated(t) if t<observed) {
             return Err("Availability precedes observation".into());
         }
@@ -128,6 +142,9 @@ pub(crate) fn roster(chunk: &ValidatedChunk) -> Result<Vec<RosterDriver>> {
         .collect()
 }
 pub(crate) fn append(chunk: &ValidatedChunk, source: u32, events: &mut Vec<Event>) -> Result<()> {
+    if chunk.channel() == Channel::Laps {
+        return laps::append_laps(chunk, source, events);
+    }
     for row in chunk.records() {
         let observed = utc_millis_ceiling(row["date"].as_str().ok_or("Missing event timestamp")?)?;
         let payload = match chunk.channel() {

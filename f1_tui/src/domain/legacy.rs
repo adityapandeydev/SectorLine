@@ -106,6 +106,31 @@ pub fn adapt_legacy_demo(
             gap_to_leader: generated(parse_legacy_gap(&car.gap_to_leader), &source, &timing)?,
             gap_to_ahead: generated(parse_legacy_gap(&car.gap_to_ahead), &source, &timing)?,
             sectors: [s1?, s2?, s3?],
+            lap_eligibility: generated(
+                Err(ContractError("No lap eligibility in demo")),
+                &source,
+                &timing,
+            )?,
+            lap_number: generated(
+                Err(ContractError("No recorded lap boundary in demo")),
+                &source,
+                &timing,
+            )?,
+            lap_time: generated(
+                Err(ContractError("No recorded lap duration in demo")),
+                &source,
+                &timing,
+            )?,
+            personal_best: generated(
+                Err(ContractError("No eligible best in demo")),
+                &source,
+                &timing,
+            )?,
+            status: generated(
+                Err(ContractError("No recorded status in demo")),
+                &source,
+                &timing,
+            )?,
         });
     }
     PlaybackFrame::new(
