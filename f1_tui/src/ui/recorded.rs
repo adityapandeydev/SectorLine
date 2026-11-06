@@ -1,4 +1,4 @@
-//! Minimal source-backed timing view. No demo map, weather, tyres or lap estimates.
+//! Source-backed timing view with explicit completed-lap and provisional-best labels.
 use crate::{
     app::App,
     domain::{DrsState, Gap},
@@ -17,7 +17,7 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
         Constraint::Length(3),
         Constraint::Length(2),
         Constraint::Min(1),
-        Constraint::Length(2),
+        Constraint::Length(5),
         Constraint::Length(if app.navigation_input.is_some() { 5 } else { 2 }),
         Constraint::Length(if app.load_message.is_some() { 3 } else { 0 }),
     ])
@@ -156,12 +156,41 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
         .iter()
         .find(|c| c.driver.number.get() == replay.selected())
     {
-        let reason = car
-            .throttle
-            .reason()
-            .or(car.speed_kmh.reason())
-            .unwrap_or("Sample held from its observation time; age shown above");
-        frame.render_widget(Paragraph::new(format!("Selected #{} | {reason}\nSectors, tyres, flags, weather and track view unavailable in this slice",car.driver.number)).wrap(Wrap{trim:true}).style(Style::default().fg(Color::White)),areas[3]);
+        let lap = car
+            .lap_number
+            .value()
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "--".into());
+        let state = car.status.value().map(|v| v.label()).unwrap_or("--");
+        let eligibility = match car.lap_eligibility.value() {
+            Some(crate::domain::timing::Eligibility::Eligible) => "eligible",
+            Some(crate::domain::timing::Eligibility::Ineligible) => "invalid",
+            _ => "unverified",
+        };
+        let best = |b: Option<&crate::domain::timing::BestLap>| {
+            b.map(|b| {
+                format!(
+                    "{}{} (L{})",
+                    lap_time(Some(&b.duration)),
+                    if b.eligibility == crate::domain::timing::Eligibility::Unknown {
+                        "*"
+                    } else {
+                        ""
+                    },
+                    b.number
+                )
+            })
+            .unwrap_or_else(|| "--".into())
+        };
+        let session = replay
+            .frame()
+            .session_best()
+            .map(|(driver, b)| format!("#{} {}", driver, best(Some(b))))
+            .unwrap_or_else(|| "--".into());
+        frame.render_widget(Paragraph::new(format!(
+            "Selected #{} | Status {state} | Completed L{lap} [{eligibility}] {}\nS1 {} | S2 {} | S3 {} (completed lap)\nBest {} | Session {session}\n* Provisional archive best; eligibility history incomplete\nTyres, flags, weather and track view unavailable",
+            car.driver.number,lap_time(car.lap_time.value()),lap_time(car.sectors[0].value()),lap_time(car.sectors[1].value()),lap_time(car.sectors[2].value()),best(car.personal_best.value())
+        )).style(Style::default().fg(Color::White)),areas[3]);
     }
     frame.render_widget(
         Paragraph::new(if let Some(input) = &app.navigation_input {
@@ -187,4 +216,10 @@ fn gap(value: Option<&Gap>) -> String {
         Some(Gap::LapsBehind(n)) => format!("+{n}L"),
         None => "--".into(),
     }
+}
+
+fn lap_time(value: Option<&crate::domain::Seconds>) -> String {
+    value
+        .map(|v| clock((v.get() * 1000.0).round() as u64))
+        .unwrap_or_else(|| "--".into())
 }

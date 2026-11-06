@@ -29,7 +29,7 @@ RECORDED SNAPSHOT view.
 **Live access is unavailable.** `--live` and `--gp live` exit with an explanation
 before loading a cache or contacting a provider. The Python bridge also rejects
 live requests, and failed historical extraction cannot fall back to the latest
-OpenF1 session. Full race semantics and authenticated live ingestion remain future work.
+OpenF1 session. Tyres, flags, track context and authenticated live ingestion remain future work.
 
 ## Completed-session catalogue
 
@@ -135,8 +135,9 @@ Missing, quarantined and ambiguous values remain `--`; unknown DRS codes stay
 visible. Retrieval time never stands in for original availability. The view says
 when it uses event-time estimates because original delivery timing is unknown.
 The timeline begins at the earliest retained core observation, including pre-session
-records; it does not claim that instant is lights-out. Lap sectors, tyres, flags,
-weather and geometry await their later semantics tasks.
+records; it does not claim that instant is lights-out. Completed-lap sectors use
+the conservative timing rules below. Tyres, flags, weather and geometry follow
+in later tasks.
 
 Same-time records resolve deterministically by channel/driver and retrieval time.
 Tied conflicting revisions become unavailable. Exact historical revision timing
@@ -190,6 +191,40 @@ the current state; relative arrow/page seeks stop at the coverage edges.
 Seeks restore complete reducer checkpoints and replay only the remaining events.
 Quality, sample ages, locations and source provenance follow the target time;
 future samples do not survive a backward seek. Lap starts are navigation metadata,
-not evidence that a lap's sectors or time were available then. Personal bests and
-race-control history remain unavailable until their timing/event tasks implement
-them; seeking does not invent those fields.
+not evidence that a lap's sectors or time were available then. Race-control history
+follows in its event task. Completed-lap timing and provisional bests now rebuild
+through the same checkpoints (see below).
+
+## Recorded classification and lap timing
+
+Order follows timestamped source positions. Lap counts, lapped gaps, missing
+intervals, stationary telemetry and retirement labels never invent or reorder
+positions. Ties remain visible until a later source observation resolves them.
+Status is shown only from recognized, timestamped, explicit driver messages;
+missing observations do not establish DNF. Final session-result DNF/DNS/DSQ flags
+have no publication boundary in the historical schema and are not injected into
+replay, including at the last telemetry timestamp.
+
+Selected-driver detail shows the **last completed lap**, its sectors, personal
+best and session best. Archived sectors are held until a conservative completion
+estimate: the later of start plus duration/sector sum and the next lap start when
+available. A next lap start can also establish completion when the previous
+start/duration is missing; missing measured values remain `--`. These are
+approximate event-time estimates, not original sector publication timestamps.
+
+An asterisk marks a **provisional archive best** with unknown eligibility. This
+is a minimum of admitted, positive, consistent, non-pit-out lap records after
+recognized timed deletions; it is not certified official fastest-lap status.
+Unknown pit-out eligibility is excluded. A timed deletion invalidates the named
+lap for best-time calculations at that message's boundary; reinstatement makes
+it a provisional candidate again. Completed values remain visible with an
+`invalid` label, retaining the measured record. The message text's named lap is
+used, not race-control's current-race-lap field. Unrecognized message formats do
+not become inferred decisions. Conflicting lap summaries suppress values and
+bests; inconsistent lap/sector totals suppress the lap duration and best.
+
+The historical archive does not expose a general correction/publication history.
+Later downloaded corrections can still differ from what a live viewer saw.
+[OpenF1's documented lap fields and final-result semantics](https://openf1.org/docs/)
+define this limitation. Checkpoints include completed laps and timed decisions,
+so seeking backwards rebuilds bests, invalidation and quality at the target time.
