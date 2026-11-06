@@ -116,6 +116,14 @@ impl PlaybackClock {
         };
         Ok(())
     }
+    /// Seeking is deliberate and always pauses, retaining the speed.
+    pub fn seek(&mut self, target: ElapsedMillis, now: Duration) -> Result<(), String> {
+        self.pause(now)?;
+        self.position_quarter_ns = target.0.min(self.end.0) as u128 * 4_000_000;
+        self.status = PlaybackStatus::Paused;
+        self.clamp();
+        Ok(())
+    }
     pub fn step(&mut self, milliseconds: u64, now: Duration) -> Result<(), String> {
         self.pause(now)?;
         self.position_quarter_ns = self

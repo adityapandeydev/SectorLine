@@ -43,6 +43,8 @@ pub struct App {
     pub load_error: bool,
     pub prepared_recording: Option<RecordedReplay>,
     now: Duration,
+    pub navigation_input: Option<String>,
+    pub navigation_error: Option<String>,
 }
 
 impl App {
@@ -62,6 +64,8 @@ impl App {
             load_error: false,
             prepared_recording: None,
             now: Duration::ZERO,
+            navigation_input: None,
+            navigation_error: None,
         }
     }
 
@@ -73,6 +77,40 @@ impl App {
         {
             self.should_quit = true;
             return AppAction::Quit;
+        }
+        if let Some(input) = &mut self.navigation_input {
+            match key.code {
+                KeyCode::Esc => {
+                    self.navigation_input = None;
+                    self.navigation_error = None;
+                }
+                KeyCode::Backspace => {
+                    input.pop();
+                    self.navigation_error = None;
+                }
+                KeyCode::Enter => {
+                    let result =
+                        crate::replay::navigation::Navigation::parse(input).and_then(|command| {
+                            self.prepared_recording
+                                .as_mut()
+                                .ok_or_else(|| "No recorded session".into())
+                                .and_then(|r| r.navigate(command))
+                        });
+                    match result {
+                        Ok(()) => {
+                            self.navigation_input = None;
+                            self.navigation_error = None;
+                        }
+                        Err(error) => self.navigation_error = Some(error.to_string()),
+                    }
+                }
+                KeyCode::Char(c) if !c.is_control() && input.len() < 64 => {
+                    input.push(c);
+                    self.navigation_error = None;
+                }
+                _ => {}
+            }
+            return AppAction::None;
         }
         if key.code == KeyCode::Esc && self.load_id.is_some() {
             self.load_id = None;
@@ -87,6 +125,26 @@ impl App {
             && let Some(replay) = &mut self.prepared_recording
         {
             match key.code {
+                KeyCode::Char('g') => {
+                    let _ = replay.pause();
+                    self.navigation_input = Some(String::new());
+                    self.navigation_error = None;
+                    return AppAction::None;
+                }
+                KeyCode::Left | KeyCode::PageUp => {
+                    let step = if key.code == KeyCode::Left {
+                        1000
+                    } else {
+                        60_000
+                    };
+                    if let Err(error) = replay.seek(crate::domain::ElapsedMillis(
+                        replay.frame().elapsed().0.saturating_sub(step),
+                    )) {
+                        self.load_message = Some(error.to_string());
+                        self.load_error = true;
+                    }
+                    return AppAction::None;
+                }
                 KeyCode::Right | KeyCode::PageDown => {
                     let step = if key.code == KeyCode::Right {
                         1000
@@ -280,12 +338,16 @@ impl App {
                 self.load_id = None;
                 match result {
                     Ok(SessionResult::Demo(stream)) => {
+                        self.navigation_input = None;
+                        self.navigation_error = None;
                         self.prepared_recording = None;
                         self.stream = *stream;
                         self.load_message = Some("Generated demo ready".into());
                         self.load_error = false;
                     }
                     Ok(SessionResult::Search(mut options)) => {
+                        self.navigation_input = None;
+                        self.navigation_error = None;
                         if let Some(replay) = &mut self.prepared_recording {
                             let _ = replay.pause();
                         }
@@ -300,6 +362,8 @@ impl App {
                         ));
                     }
                     Ok(SessionResult::Recording(cache)) => {
+                        self.navigation_input = None;
+                        self.navigation_error = None;
                         self.prepared_recording = Some(*cache);
                         if let Some(replay) = &mut self.prepared_recording {
                             let _ = replay.update_at(self.now);

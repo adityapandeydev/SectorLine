@@ -29,7 +29,7 @@ RECORDED SNAPSHOT view.
 **Live access is unavailable.** `--live` and `--gp live` exit with an explanation
 before loading a cache or contacting a provider. The Python bridge also rejects
 live requests, and failed historical extraction cannot fall back to the latest
-OpenF1 session. Full race semantics, seeking and authenticated live ingestion remain future work.
+OpenF1 session. Full race semantics and authenticated live ingestion remain future work.
 
 ## Completed-session catalogue
 
@@ -126,7 +126,7 @@ Use `--catalogue-cache PATH` and `--recording-root PATH` to override user cache 
 Preparation has a 15-minute job deadline; retry resumes saved chunks. A ready
 recording opens **RECORDED SNAPSHOT / PAUSED**. Space starts/pauses timestamp-driven
 playback; `1`/`2`/`5`/`0` select 1x/2x/5x/10x. Home restarts at the beginning,
-paused. `Right` advances one second and `Page Down` advances 60 seconds, pausing
+paused. `Left`/`Right` seek one second and `Page Up`/`Page Down` seek 60 seconds, pausing
 playback; Up/Down selects a driver. Opening the session selector pauses playback. The selector's generated option opens the bundled cached demo; legacy
 `--gp` extraction remains a startup CLI path.
 
@@ -164,3 +164,32 @@ Rendering is capped at 30 Hz and runs on input/resize/loader updates or advancin
 playback. Paused idle playback does not redraw continually. Rendering performs no
 network/cache reads. Release performance budgets still require their later full
 measurement tasks; current regression checks are not emulator latency guarantees.
+
+## Seek and recording synchronization
+
+Press `g` in a recorded session to open navigation. Playback pauses while editing;
+Enter applies, Esc cancels, and errors stay beside the input. Every seek stays
+paused; Space resumes at the chosen speed. Driver selection survives a seek.
+
+- `time 12:34.500` goes to observation timeline time 12 minutes, 34.5 seconds.
+- `lap 12` goes to the **selected driver's** recorded lap start. Missing,
+  conflicting or out-of-coverage lap starts are rejected.
+- `offset -00:12.500` sets a signed recording offset; `offset +00:00` resets it.
+- `recording 15:00` aligns the dashboard with that external video/recording time.
+
+The rule is **observation timeline time = external recording time + offset**.
+Zero is the first core observation in the cached coverage, not lights out, the
+scheduled start, or the video's start. For example, if timeline 10:00 aligns with
+video 10:12.5, set offset -00:12.500, then enter the video's current `recording`
+time. Pause the video while aligning and resume both at the same speed. Offset
+changes do not jump playback; a `recording` command applies the mapping. This is
+manual synchronization, without video control or automatic drift correction.
+Offsets last only for the loaded recording. Invalid/out-of-range commands retain
+the current state; relative arrow/page seeks stop at the coverage edges.
+
+Seeks restore complete reducer checkpoints and replay only the remaining events.
+Quality, sample ages, locations and source provenance follow the target time;
+future samples do not survive a backward seek. Lap starts are navigation metadata,
+not evidence that a lap's sectors or time were available then. Personal bests and
+race-control history remain unavailable until their timing/event tasks implement
+them; seeking does not invent those fields.

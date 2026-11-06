@@ -262,6 +262,7 @@ fn event_key(event: &Event) -> ((i64, u8), i64, usize, NonZeroU32) {
     )
 }
 
+#[derive(Clone)]
 pub struct SessionState {
     token: Arc<()>,
     elapsed: ElapsedMillis,

@@ -1,4 +1,6 @@
+pub mod checkpoint;
 pub mod clock;
+pub mod navigation;
 pub mod timeline;
 
 use crate::{
@@ -18,6 +20,9 @@ pub struct RecordedReplay {
     selected: u32,
     clock: PlaybackClock,
     now: Duration,
+    checkpoints: checkpoint::Checkpoints,
+    laps: navigation::LapIndex,
+    offset_ms: i64,
 }
 impl RecordedReplay {
     pub fn from_cache(
@@ -26,9 +31,29 @@ impl RecordedReplay {
         cancel: &Cancellation,
         progress: &dyn Fn(usize, usize),
     ) -> Result<Self> {
-        Self::new(Timeline::from_cache(cache, cancel, progress)?, title)
+        let laps = navigation::LapIndex::from_cache(cache, cancel)?;
+        Self::with_navigation(
+            Timeline::from_cache(cache, cancel, progress)?,
+            title,
+            laps,
+            cancel,
+        )
     }
     pub fn new(timeline: Timeline, title: String) -> Result<Self> {
+        Self::with_navigation(
+            timeline,
+            title,
+            navigation::LapIndex::default(),
+            &Cancellation::default(),
+        )
+    }
+    pub fn with_navigation(
+        timeline: Timeline,
+        title: String,
+        laps: navigation::LapIndex,
+        cancel: &Cancellation,
+    ) -> Result<Self> {
+        let checkpoints = checkpoint::Checkpoints::build(&timeline, cancel)?;
         let state = timeline.state_at(ElapsedMillis(0), ReplayPolicy::EventTimeEstimates)?;
         let frame = state.frame(&timeline)?;
         let selected = frame
@@ -47,6 +72,9 @@ impl RecordedReplay {
             selected,
             clock,
             now: Duration::ZERO,
+            checkpoints,
+            laps,
+            offset_ms: 0,
         })
     }
     pub fn timeline(&self) -> &Timeline {
@@ -62,9 +90,51 @@ impl RecordedReplay {
         self.selected
     }
     pub fn advance_by(&mut self, milliseconds: u64) -> Result<()> {
-        self.clock.step(milliseconds, self.now)?;
-        self.project()?;
+        self.seek(ElapsedMillis(
+            self.frame
+                .elapsed()
+                .0
+                .saturating_add(milliseconds)
+                .min(self.timeline.end().0),
+        ))
+    }
+    pub fn seek(&mut self, target: ElapsedMillis) -> Result<()> {
+        if target > self.timeline.end() {
+            return Err("Time lies outside this recording's coverage".into());
+        }
+        let state = self.checkpoints.restore(&self.timeline, target)?;
+        let frame = state.frame(&self.timeline)?;
+        self.clock.seek(target, self.now)?;
+        self.state = state;
+        self.frame = frame;
         Ok(())
+    }
+    pub fn offset_ms(&self) -> i64 {
+        self.offset_ms
+    }
+    pub fn navigate(&mut self, command: navigation::Navigation) -> Result<()> {
+        use navigation::Navigation;
+        let target = match command {
+            Navigation::Time(ms) => ElapsedMillis(ms),
+            Navigation::Lap(lap) => self.laps.target(
+                self.selected,
+                lap,
+                self.timeline.origin(),
+                self.timeline.end(),
+            )?,
+            Navigation::Offset(ms) => {
+                self.offset_ms = ms;
+                return Ok(());
+            }
+            Navigation::Recording(ms) => {
+                let target = i128::from(ms) + i128::from(self.offset_ms);
+                if target < 0 || target > i128::from(self.timeline.end().0) {
+                    return Err("Recording time + offset lies outside coverage".into());
+                }
+                ElapsedMillis(target as u64)
+            }
+        };
+        self.seek(target)
     }
     pub fn status(&self) -> PlaybackStatus {
         self.clock.status()
@@ -93,12 +163,7 @@ impl RecordedReplay {
         Ok(())
     }
     pub fn restart(&mut self) -> Result<()> {
-        self.clock.restart(self.now)?;
-        self.state = self
-            .timeline
-            .state_at(ElapsedMillis(0), ReplayPolicy::EventTimeEstimates)?;
-        self.frame = self.state.frame(&self.timeline)?;
-        Ok(())
+        self.seek(ElapsedMillis(0))
     }
     fn project(&mut self) -> Result<bool> {
         let target = self.clock.position();

@@ -125,7 +125,68 @@ fn main() -> Result<()> {
         UtcMillis(timeline.origin().0),
         timeline.end()
     );
-    let mut replay = sectorline::replay::RecordedReplay::new(timeline, "Offline traversal".into())?;
+    let laps =
+        sectorline::replay::navigation::LapIndex::from_cache(&cache, &Cancellation::default())?;
+    let mut replay = sectorline::replay::RecordedReplay::with_navigation(
+        timeline,
+        "Offline traversal".into(),
+        laps,
+        &Cancellation::default(),
+    )?;
+    let mut seed = 42_u64;
+    let mut slowest = std::time::Duration::ZERO;
+    for _ in 0..100 {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let target = ElapsedMillis(seed % (replay.timeline().end().0 + 1));
+        let reference = replay
+            .timeline()
+            .state_at(target, ReplayPolicy::EventTimeEstimates)?
+            .frame(replay.timeline())?;
+        let start = std::time::Instant::now();
+        replay.seek(target)?;
+        slowest = slowest.max(start.elapsed());
+        assert_eq!(replay.frame(), &reference);
+    }
+    // Verify cache-backed lap navigation independently against the raw archive.
+    let selected = replay.selected();
+    let mut lap_checked = false;
+    for i in 0..cache.chunk_count() {
+        if cache.chunk_metadata(i)?.channel != Channel::Laps {
+            continue;
+        }
+        let chunk = cache.read_chunk(i)?;
+        for row in chunk.records() {
+            if row["driver_number"].as_u64() != Some(selected as u64) {
+                continue;
+            }
+            if let (Some(lap), Some(date)) =
+                (row["lap_number"].as_u64(), row["date_start"].as_str())
+            {
+                let start = sectorline::domain::normalize::utc_millis_ceiling(date)?;
+                if start.0 < replay.timeline().origin().0 {
+                    continue;
+                }
+                replay.navigate(sectorline::replay::navigation::Navigation::Lap(
+                    lap.try_into()?,
+                ))?;
+                assert_eq!(
+                    replay.frame().elapsed().0,
+                    (start.0 - replay.timeline().origin().0) as u64
+                );
+                lap_checked = true;
+                break;
+            }
+        }
+        if lap_checked {
+            break;
+        }
+    }
+    assert!(lap_checked, "Expected a cache-backed lap-start check");
+    println!(
+        "100 full-recording seeks match fresh reconstruction; slowest measured seek {:?}. Cache-backed selected-driver lap start matches raw data.",
+        slowest
+    );
+    replay.restart()?;
     replay.set_speed(sectorline::replay::clock::Speed::Twenty)?;
     replay.toggle()?;
     let mut ticks = 0;

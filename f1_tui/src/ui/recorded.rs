@@ -18,7 +18,7 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
         Constraint::Length(2),
         Constraint::Min(1),
         Constraint::Length(2),
-        Constraint::Length(1),
+        Constraint::Length(if app.navigation_input.is_some() { 5 } else { 2 }),
         Constraint::Length(if app.load_message.is_some() { 3 } else { 0 }),
     ])
     .split(frame.area());
@@ -164,8 +164,11 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
         frame.render_widget(Paragraph::new(format!("Selected #{} | {reason}\nSectors, tyres, flags, weather and track view unavailable in this slice",car.driver.number)).wrap(Wrap{trim:true}).style(Style::default().fg(Color::White)),areas[3]);
     }
     frame.render_widget(
-        Paragraph::new("Space play/pause | 1/2/5/0 speed | Home restart | s sessions | q quit")
-            .style(Style::default().fg(Color::White)),
+        Paragraph::new(if let Some(input) = &app.navigation_input {
+            format!("Go to > {input}\ntime MM:SS.mmm | lap N (selected driver) | Enter apply | Esc cancel\noffset +/-MM:SS.mmm | recording MM:SS.mmm\nTimeline = recording + offset; zero = first core observation\n{}", app.navigation_error.as_deref().unwrap_or("Seeking pauses playback; Space resumes"))
+        } else {
+            format!("Space play/pause | 1/2/5/0 speed | Home restart | g go to | q quit\nLeft/Right 1s | PgUp/PgDn 60s | s sessions | Offset {:+} ms", replay.offset_ms())
+        }).style(Style::default().fg(Color::White)),
         areas[4],
     );
 }
