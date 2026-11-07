@@ -248,6 +248,12 @@ impl Timeline {
     pub fn drivers(&self) -> &[RosterDriver] {
         &self.drivers
     }
+    pub(crate) fn token(&self) -> &Arc<()> {
+        &self.token
+    }
+    pub(crate) fn events(&self) -> &[Event] {
+        &self.events
+    }
     pub fn event_count(&self) -> usize {
         self.events.len()
     }

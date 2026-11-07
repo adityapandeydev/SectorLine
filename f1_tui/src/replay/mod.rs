@@ -24,6 +24,7 @@ pub struct RecordedReplay {
     laps: navigation::LapIndex,
     offset_ms: i64,
     conditions: crate::domain::conditions::ConditionsFrame,
+    track: crate::track::TrackArchive,
 }
 impl RecordedReplay {
     pub fn from_cache(
@@ -33,12 +34,14 @@ impl RecordedReplay {
         progress: &dyn Fn(usize, usize),
     ) -> Result<Self> {
         let laps = navigation::LapIndex::from_cache(cache, cancel)?;
-        Self::with_navigation(
+        let mut replay = Self::with_navigation(
             Timeline::from_cache(cache, cancel, progress)?,
             title,
             laps,
             cancel,
-        )
+        )?;
+        replay.track = crate::track::TrackArchive::from_cache(cache, &replay.timeline, cancel)?;
+        Ok(replay)
     }
     pub fn new(timeline: Timeline, title: String) -> Result<Self> {
         Self::with_navigation(
@@ -79,7 +82,16 @@ impl RecordedReplay {
             laps,
             offset_ms: 0,
             conditions,
+            track: crate::track::TrackArchive::default(),
         })
+    }
+    pub fn with_track_laps(mut self, laps: Vec<crate::track::LapWindow>) -> Result<Self> {
+        self.track =
+            crate::track::TrackArchive::build(&self.timeline, laps, &Cancellation::default())?;
+        Ok(self)
+    }
+    pub fn track(&self) -> &crate::track::TrackArchive {
+        &self.track
     }
     pub fn conditions(&self) -> &crate::domain::conditions::ConditionsFrame {
         &self.conditions

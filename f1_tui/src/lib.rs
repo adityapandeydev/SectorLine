@@ -13,4 +13,3 @@ pub use app::App;
 pub use live::{LiveSessionStatus, LiveTelemetryClient};
 pub use models::*;
 pub use stream::TelemetryStream;
-pub use track::CircuitRenderer;
