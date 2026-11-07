@@ -1,5 +1,6 @@
 pub mod checkpoint;
 pub mod clock;
+pub mod details;
 pub mod navigation;
 pub mod timeline;
 
@@ -25,6 +26,7 @@ pub struct RecordedReplay {
     offset_ms: i64,
     conditions: crate::domain::conditions::ConditionsFrame,
     track: crate::track::TrackArchive,
+    details: details::DetailsIndex,
 }
 impl RecordedReplay {
     pub fn from_cache(
@@ -70,6 +72,7 @@ impl RecordedReplay {
         let conditions =
             timeline.conditions_at(ElapsedMillis(0), ReplayPolicy::EventTimeEstimates)?;
         let clock = PlaybackClock::new(timeline.end());
+        let details = details::DetailsIndex::build(&timeline, cancel)?;
         Ok(Self {
             timeline,
             state,
@@ -82,8 +85,35 @@ impl RecordedReplay {
             laps,
             offset_ms: 0,
             conditions,
+            details,
             track: crate::track::TrackArchive::default(),
         })
+    }
+    pub fn visible_events(&self) -> &[details::ReplayEvent] {
+        self.details.visible(
+            self.timeline
+                .origin()
+                .0
+                .saturating_add(self.frame.elapsed().0.min(i64::MAX as u64) as i64),
+        )
+    }
+    pub fn telemetry_history(&self) -> Vec<details::HistoryPoint> {
+        self.details.history(
+            &self.timeline,
+            self.selected,
+            self.timeline
+                .origin()
+                .0
+                .saturating_add(self.frame.elapsed().0.min(i64::MAX as u64) as i64),
+        )
+    }
+    pub fn comparable_lap(&self) -> Option<crate::domain::timing::LapTiming> {
+        self.state
+            .comparable_lap(&self.timeline, std::num::NonZeroU32::new(self.selected)?)
+    }
+    pub fn eligible_reference(&self) -> Option<crate::domain::timing::LapTiming> {
+        self.state
+            .eligible_reference(&self.timeline, std::num::NonZeroU32::new(self.selected)?)
     }
     pub fn with_track_laps(mut self, laps: Vec<crate::track::LapWindow>) -> Result<Self> {
         self.track =

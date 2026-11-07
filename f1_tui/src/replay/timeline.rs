@@ -248,6 +248,12 @@ impl Timeline {
     pub fn drivers(&self) -> &[RosterDriver] {
         &self.drivers
     }
+    pub(crate) fn conditions_archive(&self) -> &conditions::ConditionsArchive {
+        &self.conditions
+    }
+    pub(crate) fn sources(&self) -> &[ChunkMetadata] {
+        &self.sources
+    }
     pub(crate) fn token(&self) -> &Arc<()> {
         &self.token
     }
