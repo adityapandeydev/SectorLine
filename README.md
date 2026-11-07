@@ -98,7 +98,7 @@ Existing T05 scratch downloads can be imported with `--import SCRATCH_DIR`; raw
 responses are revalidated and hashed, rather than trusting the saved normalized
 JSON. Import resumes when repeated. The recording covers the requested time range,
 including explicit empty queries; source gaps remain gaps. A completed cache
-opens the manual recorded timing view through the TUI loader.
+opens recorded playback through the background TUI loader.
 
 No public release or data redistribution license is configured.
 
@@ -265,3 +265,32 @@ small in-memory source channels at the target time. Seeking does not reuse a
 future conditions snapshot. Render callbacks perform no file or network reads.
 The historical provider still lacks original delivery/revision history, so this
 is source-based event-time replay, not an exact reconstruction of a live feed.
+
+## Terminal workspace
+
+Sector Line uses the same compact shell for generated demo and recorded replay:
+two header rows, one view-tab row, a flexible body, three timeline rows, one
+source/load-status row and one contextual-help row. Exact OpenF1 session ID,
+recorded/demo provenance and playback state stay visible around overlays.
+
+- `Tab` / `Shift+Tab`: switch Timing, Driver and Conditions.
+- `[` / `]`: scroll Driver or Conditions; arrows still select the driver.
+- `?`: open scrollable help and the full load/error message; Up/Down scroll,
+  Esc closes. Opening help pauses playback; Space resumes after closing.
+- `s`: sessions; `g`: recorded go-to; `r`: retry the last load. Error/loading
+  footers expose their retry/cancel controls. Existing playback keys remain.
+
+At **144x40 or larger**, timing, context and selected-driver panes appear side by
+side. At **120x32 or larger**, timing and context share the body; driver detail
+has its own tab. At **80x24**, each tab uses the full body width. Smaller windows
+show the minimum-size notice; Ctrl+C always quits, including inside text input.
+The geometry is measured in terminal cells; font appearance is controlled by your
+terminal. The shell uses terminal colors, reverse-video selection and text
+markers. Set `NO_COLOR` before launch for a monochrome workspace.
+
+The timeline is playback progress, not predicted race distance. `~` stale and `--`
+unavailable retain their meanings. Track geometry stays explicitly unavailable
+until its validation/view task; no demo track is substituted into recorded mode.
+Detailed timing columns, calibrated track rendering and richer driver/event views
+continue in the next tasks. The previous framed gauges/demo radar are retired
+from the shared workspace.
