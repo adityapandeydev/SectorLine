@@ -17,49 +17,14 @@ pub(super) fn render(frame: &mut Frame, app: &App, r: &layout::Regions) {
     }
 }
 fn timing(frame: &mut Frame, app: &App, area: Rect) {
-    let area = panel(frame, area, "Timing / generated", app.theme);
-    let s = &app.stream;
-    let cars = &s.current_frame().cars;
-    let selected = cars
-        .iter()
-        .position(|c| c.driver == s.selected_driver_code)
-        .unwrap_or(0);
-    let start = selected.saturating_sub(area.height.saturating_sub(2) as usize);
-    let rows = cars
-        .iter()
-        .skip(start)
-        .take(area.height.saturating_sub(1) as usize)
-        .map(|c| {
-            Row::new(vec![
-                Cell::from(if c.driver == s.selected_driver_code {
-                    ">"
-                } else {
-                    " "
-                }),
-                Cell::from(c.position.to_string()),
-                Cell::from(format!("{} #{}", c.driver, c.number)),
-                Cell::from(c.gap_to_leader.clone()),
-                Cell::from(format!("{:.0}", c.speed)),
-            ])
-            .style(if c.driver == s.selected_driver_code {
-                app.theme.selected()
-            } else {
-                app.theme.text()
-            })
-        });
-    frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(1),
-                Constraint::Length(3),
-                Constraint::Length(10),
-                Constraint::Length(11),
-                Constraint::Min(5),
-            ],
-        )
-        .header(Row::new(["", "Pos", "Driver", "Gap", "km/h"]).style(app.theme.title())),
+    let selected = app.stream.selected_car().map(|c| c.number).unwrap_or(0);
+    super::timing::render(
+        frame,
+        app,
+        &super::view_model::demo(&app.stream),
+        selected,
         area,
+        true,
     );
 }
 fn driver(frame: &mut Frame, app: &App, area: Rect) {
@@ -74,7 +39,7 @@ fn driver(frame: &mut Frame, app: &App, area: Rect) {
         app.theme,
     );
     let text = format!(
-        "Generated telemetry\n\nSpeed {:.0} km/h\nGear {} | RPM {}\nThrottle {}%\nBrake {}\nDRS {}\n\nTyre {} | Age {}\nPit {}\n\nS1 {}\nS2 {}\nS3 {}\n\nSimulation, not observed data",
+        "Generated telemetry\n\nSpeed {:.0} km/h\nGear {} | RPM {}\nThrottle {}%\nBrake {}\nDRS {}\n\nTyre {} | Age {}\nPit {}\n\nS1 {}\nS2 {}\nS3 {}\n\nSimulation, not observed data\nTeam {}",
         c.speed,
         c.gear,
         c.rpm,
@@ -86,7 +51,10 @@ fn driver(frame: &mut Frame, app: &App, area: Rect) {
         c.pit_status,
         c.s1,
         c.s2,
-        c.s3
+        c.s3,
+        s.driver_info(&c.driver)
+            .map(|d| d.team.as_str())
+            .unwrap_or("--")
     );
     frame.render_widget(
         scroll(

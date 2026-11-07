@@ -294,3 +294,25 @@ until its validation/view task; no demo track is substituted into recorded mode.
 Detailed timing columns, calibrated track rendering and richer driver/event views
 continue in the next tasks. The previous framed gauges/demo radar are retired
 from the shared workspace.
+
+
+## Timing table
+
+The timing table uses fixed, right-aligned numeric columns. `Gap(s)` and `Int(s)`
+are seconds; `+nL` means laps behind and `leader` is explicit. `--` is unavailable,
+`~` marks a stale held value, and `...` means the value exceeds its column width.
+The Driver view retains full timing detail.
+
+`Ty` uses S/M/H/I/W for soft/medium/hard/intermediate/wet, `?` for an unrecognized
+source compound. `Age` is tyre age in completed laps; `Lap` counts completed laps.
+The expanded table adds interval, last lap in seconds, speed in km/h and `AgeS`
+(telemetry observation age in seconds). Narrow panes prioritize classification,
+gap, tyres and evidenced RET/DNF/DNS/DSQ status. A historical pit summary does not
+imply that a car is currently in the pits.
+
+`Tm` is a mnemonic of the source team name, with deterministic numbered labels
+where mnemonics collide. Full names appear in Driver and the Team key. Optional
+source colours use the basic ANSI palette; team text and `>` selection also work
+with `NO_COLOR`. Missing team metadata stays unknown. Up/Down or j/k follows the
+selected driver's identity through reorders and scrolls larger grids into view;
+the heading shows the visible range and total.

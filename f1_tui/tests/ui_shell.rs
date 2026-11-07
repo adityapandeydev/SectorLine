@@ -383,7 +383,12 @@ fn ui_shell_no_color_preserves_selection_and_keyboard_focus() {
             .iter()
             .any(|c| c.modifier.contains(Modifier::REVERSED))
     );
-    assert!(capture(&app, 80, 24).contains("> 1   NOR #4"));
+    assert!(
+        capture(&app, 80, 24)
+            .lines()
+            .any(|line| line.starts_with('>') && line.contains("NOR #4")),
+        "No-color marker stays on selected driver after numeric right alignment"
+    );
     app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
     let view = app.view;
     app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));

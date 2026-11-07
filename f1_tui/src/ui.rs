@@ -11,6 +11,8 @@ pub mod layout;
 mod recorded;
 mod shell;
 pub mod theme;
+mod timing;
+pub mod view_model;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum View {
     #[default]

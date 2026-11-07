@@ -48,6 +48,7 @@ pub struct App {
     pub show_help: bool,
     pub help_scroll: u16,
     pub panel_scroll: u16,
+    pub timing_offset: std::cell::Cell<usize>,
     pub navigation_input: Option<String>,
     pub navigation_error: Option<String>,
 }
@@ -74,6 +75,7 @@ impl App {
             show_help: false,
             help_scroll: 0,
             panel_scroll: 0,
+            timing_offset: std::cell::Cell::new(0),
             navigation_input: None,
             navigation_error: None,
         }
@@ -392,6 +394,7 @@ impl App {
                 match result {
                     Ok(SessionResult::Demo(stream)) => {
                         self.panel_scroll = 0;
+                        self.timing_offset.set(0);
                         self.navigation_input = None;
                         self.navigation_error = None;
                         self.prepared_recording = None;
@@ -417,6 +420,7 @@ impl App {
                     }
                     Ok(SessionResult::Recording(cache)) => {
                         self.panel_scroll = 0;
+                        self.timing_offset.set(0);
                         self.navigation_input = None;
                         self.navigation_error = None;
                         self.prepared_recording = Some(*cache);
