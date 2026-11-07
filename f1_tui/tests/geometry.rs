@@ -427,3 +427,6 @@ fn geometry_cache_pipeline_rejects_pits_gaps_jumps_and_unknown_context() {
         }
     }
 }
+
+#[path = "support/geometry_ui.rs"]
+mod ui;

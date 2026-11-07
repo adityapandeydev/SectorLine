@@ -12,6 +12,7 @@ mod recorded;
 mod shell;
 pub mod theme;
 mod timing;
+mod track;
 pub mod view_model;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum View {
@@ -19,6 +20,7 @@ pub enum View {
     Timing,
     Driver,
     Conditions,
+    Track,
 }
 impl View {
     pub fn next(self, back: bool) -> Self {
@@ -26,8 +28,10 @@ impl View {
             Self::Timing => 0,
             Self::Driver => 1,
             Self::Conditions => 2,
+            Self::Track => 3,
         };
-        [Self::Timing, Self::Driver, Self::Conditions][(index + if back { 2 } else { 1 }) % 3]
+        [Self::Timing, Self::Driver, Self::Conditions, Self::Track]
+            [(index + if back { 3 } else { 1 }) % 4]
     }
 }
 pub fn render(frame: &mut Frame, app: &App) {

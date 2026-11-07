@@ -6,7 +6,14 @@ pub(super) fn render(frame: &mut Frame, app: &App, r: &layout::Regions) {
             let (table, context, detail) = r.timing_columns();
             timing(frame, app, table);
             if let Some(area) = context {
-                conditions(frame, app, area);
+                let [summary, _, map] = Layout::vertical([
+                    Constraint::Length(4),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                ])
+                .areas(area);
+                conditions(frame, app, summary);
+                super::track::demo(frame, app, map);
             }
             if let Some(area) = detail {
                 driver(frame, app, area);
@@ -14,6 +21,7 @@ pub(super) fn render(frame: &mut Frame, app: &App, r: &layout::Regions) {
         }
         View::Driver => driver(frame, app, r.body),
         View::Conditions => conditions(frame, app, r.body),
+        View::Track => super::track::demo(frame, app, r.body),
     }
 }
 fn timing(frame: &mut Frame, app: &App, area: Rect) {

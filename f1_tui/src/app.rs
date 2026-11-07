@@ -48,6 +48,8 @@ pub struct App {
     pub show_help: bool,
     pub help_scroll: u16,
     pub panel_scroll: u16,
+    pub map_rotation: f64,
+    pub cell_aspect: f64,
     pub timing_offset: std::cell::Cell<usize>,
     pub navigation_input: Option<String>,
     pub navigation_error: Option<String>,
@@ -75,6 +77,8 @@ impl App {
             show_help: false,
             help_scroll: 0,
             panel_scroll: 0,
+            map_rotation: 0.0,
+            cell_aspect: 2.0,
             timing_offset: std::cell::Cell::new(0),
             navigation_input: None,
             navigation_error: None,
@@ -155,6 +159,19 @@ impl App {
             self.view = self.view.next(key.code == KeyCode::BackTab);
             self.panel_scroll = 0;
             return AppAction::None;
+        }
+        if !self.show_session_modal && self.view == ui::View::Track {
+            match key.code {
+                KeyCode::Char(',') => {
+                    self.map_rotation = (self.map_rotation - 15.0).rem_euclid(360.0)
+                }
+                KeyCode::Char('.') => {
+                    self.map_rotation = (self.map_rotation + 15.0).rem_euclid(360.0)
+                }
+                KeyCode::Char('-') => self.cell_aspect = (self.cell_aspect - 0.1).max(1.0),
+                KeyCode::Char('+') => self.cell_aspect = (self.cell_aspect + 0.1).min(3.0),
+                _ => {}
+            }
         }
         if !self.show_session_modal
             && self.view != ui::View::Timing

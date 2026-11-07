@@ -29,7 +29,7 @@ RECORDED SNAPSHOT view.
 **Live access is unavailable.** `--live` and `--gp live` exit with an explanation
 before loading a cache or contacting a provider. The Python bridge also rejects
 live requests, and failed historical extraction cannot fall back to the latest
-OpenF1 session. Track geometry and authenticated live ingestion remain future work.
+OpenF1 session. Recorded maps use validated session-local lap traces; authenticated live ingestion remains future work.
 
 ## Completed-session catalogue
 
@@ -137,7 +137,7 @@ when it uses event-time estimates because original delivery timing is unknown.
 The timeline begins at the earliest retained core observation, including pre-session
 records; it does not claim that instant is lights-out. Completed-lap sectors use
 the conservative timing rules below. Tyres, flags and weather follow source-timed
-condition rules; track geometry follows in its later task.
+condition rules; recorded maps use the observed-lap reference described below.
 
 Same-time records resolve deterministically by channel/driver and retrieval time.
 Tied conflicting revisions become unavailable. Exact historical revision timing
@@ -316,3 +316,36 @@ source colours use the basic ANSI palette; team text and `>` selection also work
 with `NO_COLOR`. Missing team metadata stays unknown. Up/Down or j/k follows the
 selected driver's identity through reorders and scrolls larger grids into view;
 the heading shows the visible range and total.
+
+
+## Recorded track view
+
+Tab to **Track** for the full map; larger Timing views also show a map beside the
+classification and flag summary. The background is a **static observed lap trace**
+from this recording, labelled with its driver and lap. It is approximate source XY,
+not a surveyed circuit outline, lane position, or start/finish detector. It uses
+archived lap context even before that lap completes in playback; car markers obey
+replay availability independently. No separate circuit service, account or download
+is added.
+
+A reference needs a complete 30–300 second lap with at least 50 finite, contiguous
+location samples, plausible step distances and closure, and known non-pit context.
+Recorded pit laps, pit-out laps and their preceding laps are excluded, as are
+unknown/conflicting lap or pit context and missing pit-channel coverage. The trace
+and all cars share one source coordinate frame and one rotation/scale transform.
+Without a validated reference the map explains that it is unavailable; timing
+continues without borrowing the generated demo circuit.
+
+Car markers use a **500 ms display delay**. Linear XY interpolation requires two
+already available samples no more than 750 ms apart, a short spatial step and the
+same known non-pit lap. Otherwise `~` marks a held sample. Missing/conflicting or
+more than two-second-old locations are hidden; out-of-frame locations are counted
+as unshown. Classification and gaps always come from timing records. Selected
+labels win collisions; the footer reports omitted labels and shown-car count.
+
+In Track view, `,` / `.` rotate 15 degrees and `-` / `+` adjust physical cell
+height/width from 1.0 to 3.0 (default 2.0). This compensates for terminal font
+geometry without independently stretching the map axes. Rotation has no implied
+geographic north. Unicode braille needs terminal font support; labels, selection
+and the basic ANSI/no-colour palette remain text based. Demo maps remain explicitly
+generated.

@@ -67,7 +67,7 @@ fn ui_shell_tabs_work_without_changing_playback_or_driver() {
     let mut app = app();
     let selected = app.stream.selected_driver_code.clone();
     let frame = app.stream.current_frame_idx;
-    for expected in [View::Driver, View::Conditions, View::Timing] {
+    for expected in [View::Driver, View::Conditions, View::Track, View::Timing] {
         assert_eq!(
             app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
             AppAction::None
@@ -75,7 +75,7 @@ fn ui_shell_tabs_work_without_changing_playback_or_driver() {
         assert_eq!(app.view, expected);
     }
     app.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT));
-    assert_eq!(app.view, View::Conditions);
+    assert_eq!(app.view, View::Track);
     assert_eq!(app.stream.selected_driver_code, selected);
     assert_eq!(app.stream.current_frame_idx, frame);
 }
