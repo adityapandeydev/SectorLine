@@ -12,6 +12,8 @@ pub struct RosterDriver {
     pub number: NonZeroU32,
     pub code: String,
     pub name: String,
+    pub team: Option<String>,
+    pub team_color: Option<[u8; 3]>,
 }
 impl RosterDriver {
     pub fn new(number: u32, code: &str, name: &str) -> Result<Self> {
@@ -25,7 +27,30 @@ impl RosterDriver {
             number: NonZeroU32::new(number).ok_or("Invalid driver number")?,
             code: code.into(),
             name: name.into(),
+            team: None,
+            team_color: None,
         })
+    }
+    /// Optional roster metadata, never inferred from driver number or current teams.
+    pub fn with_team(mut self, name: Option<&str>, color: Option<&str>) -> Result<Self> {
+        if let Some(name) = name {
+            if name.trim().is_empty() || name.chars().any(char::is_control) {
+                return Err("Invalid team label".into());
+            }
+            self.team = Some(name.trim().into());
+        }
+        self.team_color = color.and_then(|v| {
+            let v = v.strip_prefix('#').unwrap_or(v);
+            if v.len() != 6 || !v.bytes().all(|c| c.is_ascii_hexdigit()) {
+                return None;
+            }
+            Some([
+                u8::from_str_radix(&v[0..2], 16).ok()?,
+                u8::from_str_radix(&v[2..4], 16).ok()?,
+                u8::from_str_radix(&v[4..6], 16).ok()?,
+            ])
+        });
+        Ok(self)
     }
 }
 
@@ -137,7 +162,8 @@ pub(crate) fn roster(chunk: &ValidatedChunk) -> Result<Vec<RosterDriver>> {
                 number(row, "driver_number")?,
                 row["name_acronym"].as_str().unwrap_or("--"),
                 row["full_name"].as_str().unwrap_or("--"),
-            )
+            )?
+            .with_team(row["team_name"].as_str(), row["team_colour"].as_str())
         })
         .collect()
 }

@@ -37,7 +37,7 @@ fn spec() -> CacheSpec {
 }
 fn raw(index: usize) -> Vec<u8> {
     if index == 0 {
-        serde_json::to_vec(&json!([{"session_key":9590,"meeting_key":1244,"driver_number":4,"full_name":"Lando NORRIS","name_acronym":"NOR","team_name":"McLaren"}])).unwrap()
+        serde_json::to_vec(&json!([{"session_key":9590,"meeting_key":1244,"driver_number":4,"full_name":"Lando NORRIS","name_acronym":"NOR","team_name":"McLaren","team_colour":"FF8000"}])).unwrap()
     } else {
         serde_json::to_vec(&json!([{"session_key":9590,"meeting_key":1244,"driver_number":4,"date":format!("1970-01-01T00:00:0{index}Z"),"speed":200,"rpm":10000,"n_gear":5,"throttle":104,"brake":0,"drs":9}])).unwrap()
     }
@@ -103,6 +103,14 @@ fn cache_is_invisible_until_complete_and_resumes_without_duplicate_chunks() {
     assert!(car.records()[0]["throttle"].is_null());
     assert_eq!(car.issues().len(), 1);
     assert_eq!(car.raw_bytes(), raw(1));
+    let timeline = sectorline::replay::timeline::Timeline::from_cache(
+        &cache,
+        &sectorline::data::limits::Cancellation::default(),
+        &|_, _| {},
+    )
+    .unwrap();
+    assert_eq!(timeline.drivers()[0].team.as_deref(), Some("McLaren"));
+    assert_eq!(timeline.drivers()[0].team_color, Some([255, 128, 0]));
 }
 
 #[test]
