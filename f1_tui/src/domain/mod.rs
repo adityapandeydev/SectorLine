@@ -7,6 +7,7 @@ use std::{
 };
 
 pub mod classification;
+pub mod geometry;
 pub mod conditions;
 pub mod quality;
 pub mod stints;
