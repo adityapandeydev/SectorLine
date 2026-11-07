@@ -29,7 +29,7 @@ RECORDED SNAPSHOT view.
 **Live access is unavailable.** `--live` and `--gp live` exit with an explanation
 before loading a cache or contacting a provider. The Python bridge also rejects
 live requests, and failed historical extraction cannot fall back to the latest
-OpenF1 session. Tyres, flags, track context and authenticated live ingestion remain future work.
+OpenF1 session. Track geometry and authenticated live ingestion remain future work.
 
 ## Completed-session catalogue
 
@@ -136,8 +136,8 @@ visible. Retrieval time never stands in for original availability. The view says
 when it uses event-time estimates because original delivery timing is unknown.
 The timeline begins at the earliest retained core observation, including pre-session
 records; it does not claim that instant is lights-out. Completed-lap sectors use
-the conservative timing rules below. Tyres, flags, weather and geometry follow
-in later tasks.
+the conservative timing rules below. Tyres, flags and weather follow source-timed
+condition rules; track geometry follows in its later task.
 
 Same-time records resolve deterministically by channel/driver and retrieval time.
 Tied conflicting revisions become unavailable. Exact historical revision timing
@@ -228,3 +228,40 @@ Later downloaded corrections can still differ from what a live viewer saw.
 [OpenF1's documented lap fields and final-result semantics](https://openf1.org/docs/)
 define this limitation. Checkpoints include completed laps and timed decisions,
 so seeking backwards rebuilds bests, invalidation and quality at the target time.
+
+## Replay conditions and freshness
+
+The recorded view shows source-scoped track/local flags, safety-car and session
+messages, weather, selected-driver tyres and recorded pit visits. Missing
+conditions remain `--`; rainfall zero means an actual dry report, not missing data.
+A `~` prefix marks a held **stale** report. Neither stale nor missing flags imply
+a clear track. A local sector clear does not clear other sectors or the track;
+restart and safety-car-ending messages do not automatically invent green flags
+or a returned safety car. Recognized messages retain their own chronology.
+
+Stint summaries have no observation timestamp. Compound/initial tyre age are
+anchored to the matching lap's approximate start as **event-time estimates**;
+without that evidence they stay unavailable. Future `lap_end` is never displayed
+or used to promise the stint is still active. Tyre age means completed laps:
+initial source age plus contiguous, evidenced completed laps since the stint
+start. It is not fractional tyre wear or a prediction. Unknown age/compound and
+gaps stay unknown. Old stint evidence becomes stale when lap evidence stops.
+
+Pit rows do not document whether `date` denotes entry, service or exit. The view
+therefore shows a **recorded visit**, with active phase unknown. Archived lane
+and stationary durations are delayed until date plus lane duration, when present,
+as a conservative estimate; they are not backfilled at pit entry. Lane time is
+not stationary service time. Conflicting lane aliases suppress the visit values.
+
+Freshness uses replay time, so pausing does not age data and seeking recomputes
+it. Current conservative policies are: telemetry/location 2 seconds, intervals
+10 seconds, weather/flag/session reports 120 seconds, and inferred stint evidence
+180 seconds. Sparse positions and completed lap/pit history do not expire as
+continuous samples. These thresholds are application policy, not guarantees of
+provider delivery; stale values retain their timestamps and never become zero.
+
+Conditions are normalized in the existing background loader, then projected from
+small in-memory source channels at the target time. Seeking does not reuse a
+future conditions snapshot. Render callbacks perform no file or network reads.
+The historical provider still lacks original delivery/revision history, so this
+is source-based event-time replay, not an exact reconstruction of a live feed.

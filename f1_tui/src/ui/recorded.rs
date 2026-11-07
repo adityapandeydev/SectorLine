@@ -9,15 +9,15 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout},
     style::{Color, Modifier, Style},
-    widgets::{Cell, Paragraph, Row, Table, Wrap},
+    widgets::{Cell, Paragraph, Row, Table},
 };
 
 pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
     let areas = Layout::vertical([
         Constraint::Length(3),
-        Constraint::Length(2),
+        Constraint::Length(4),
         Constraint::Min(1),
-        Constraint::Length(5),
+        Constraint::Length(6),
         Constraint::Length(if app.navigation_input.is_some() { 5 } else { 2 }),
         Constraint::Length(if app.load_message.is_some() { 3 } else { 0 }),
     ])
@@ -46,7 +46,17 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
         .style(Style::default().fg(Color::White)),
         areas[0],
     );
-    frame.render_widget(Paragraph::new("Event-time estimates; original delivery times unknown. -- = unavailable. Reported positions may temporarily tie.").wrap(Wrap{trim:true}).style(Style::default().fg(Color::White)),areas[1]);
+    let conditions = replay.conditions();
+    let local = conditions
+        .local_flags
+        .iter()
+        .map(|(scope, flag)| format!("{scope:?}:{}", condition(flag, |v| format!("{v:?}"))))
+        .collect::<Vec<_>>()
+        .join(" ");
+    frame.render_widget(Paragraph::new(format!(
+        "Event-time estimates; original delivery times unknown. -- unavailable; ~ stale\nTrack {} | SC {} | Session {}\nAir {} C | Track {} C | Rain {}\nLocal {}",
+        condition(&conditions.track_flag,|v|format!("{v:?}")),condition(&conditions.safety_car,|v|format!("{v:?}")),condition(&conditions.session_status,|v|format!("{v:?}")),condition(&conditions.air_c,|v|format!("{v:.1}")),condition(&conditions.track_c,|v|format!("{v:.1}")),condition(&conditions.rain,|v|if *v{"yes".into()}else{"no".into()}),if local.is_empty(){"--"}else{&local}
+    )).style(Style::default().fg(Color::White)),areas[1]);
     let cars = replay.frame().samples();
     let selected = cars
         .iter()
@@ -61,16 +71,12 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
             .iter()
             .find(|d| d.number == car.driver.number)
             .expect("recorded roster");
-        let drs = car
-            .drs
-            .value()
-            .map(|d| match d.state() {
-                DrsState::Off => "off".into(),
-                DrsState::On => "on".into(),
-                DrsState::Eligible => "eligible".into(),
-                DrsState::Unknown => format!("?{}", d.0),
-            })
-            .unwrap_or_else(|| "--".into());
+        let drs = condition(&car.drs, |d| match d.state() {
+            DrsState::Off => "off".into(),
+            DrsState::On => "on".into(),
+            DrsState::Eligible => "eligible".into(),
+            DrsState::Unknown => format!("?{}", d.0),
+        });
         let age = car
             .speed_kmh
             .timing()
@@ -94,19 +100,10 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
                 .map(|n| n.to_string())
                 .unwrap_or_else(|| "--".into()),
             format!("{} #{}", driver.code, driver.number),
-            gap(car.gap_to_leader.value()),
-            car.speed_kmh
-                .value()
-                .map(|v| format!("{:.0}", v.get()))
-                .unwrap_or_else(|| "--".into()),
-            car.throttle
-                .value()
-                .map(|v| format!("{:.0}", v.get()))
-                .unwrap_or_else(|| "--".into()),
-            car.brake
-                .value()
-                .map(|b| format!("{b:?}").to_lowercase())
-                .unwrap_or_else(|| "--".into()),
+            condition(&car.gap_to_leader, |g| gap(Some(g))),
+            condition(&car.speed_kmh, |v| format!("{:.0}", v.get())),
+            condition(&car.throttle, |v| format!("{:.0}", v.get())),
+            condition(&car.brake, |v| format!("{v:?}").to_lowercase()),
             drs,
             age,
         ];
@@ -187,8 +184,38 @@ pub(super) fn render(frame: &mut Frame, app: &App, replay: &RecordedReplay) {
             .session_best()
             .map(|(driver, b)| format!("#{} {}", driver, best(Some(b))))
             .unwrap_or_else(|| "--".into());
+        let driver_conditions = conditions.drivers.get(&car.driver.number.get());
+        let tyre = driver_conditions
+            .map(|d| {
+                condition(&d.tyre, |t| {
+                    format!(
+                        "{} age {} completed laps",
+                        t.compound.as_deref().unwrap_or("--"),
+                        t.completed_age
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| "--".into())
+                    )
+                })
+            })
+            .unwrap_or_else(|| "--".into());
+        let pit = driver_conditions
+            .map(|d| {
+                condition(&d.pit, |p| {
+                    format!(
+                        "recorded L{} lane {}s stop {}s",
+                        p.lap.map(|n| n.to_string()).unwrap_or_else(|| "--".into()),
+                        p.lane_seconds
+                            .map(|v| format!("{v:.3}"))
+                            .unwrap_or_else(|| "--".into()),
+                        p.stop_seconds
+                            .map(|v| format!("{v:.3}"))
+                            .unwrap_or_else(|| "--".into())
+                    )
+                })
+            })
+            .unwrap_or_else(|| "--".into());
         frame.render_widget(Paragraph::new(format!(
-            "Selected #{} | Status {state} | Completed L{lap} [{eligibility}] {}\nS1 {} | S2 {} | S3 {} (completed lap)\nBest {} | Session {session}\n* Provisional archive best; eligibility history incomplete\nTyres, flags, weather and track view unavailable",
+            "Selected #{} | Status {state} | Completed L{lap} [{eligibility}] {}\nS1 {} | S2 {} | S3 {} (completed lap)\nBest {} | Session {session}\n* Provisional archive best; eligibility history incomplete\nTyre {tyre}\nPit {pit}; phase unknown",
             car.driver.number,lap_time(car.lap_time.value()),lap_time(car.sectors[0].value()),lap_time(car.sectors[1].value()),lap_time(car.sectors[2].value()),best(car.personal_best.value())
         )).style(Style::default().fg(Color::White)),areas[3]);
     }
@@ -221,5 +248,25 @@ fn gap(value: Option<&Gap>) -> String {
 fn lap_time(value: Option<&crate::domain::Seconds>) -> String {
     value
         .map(|v| clock((v.get() * 1000.0).round() as u64))
+        .unwrap_or_else(|| "--".into())
+}
+
+fn condition<T>(
+    value: &crate::domain::Observation<T>,
+    format: impl FnOnce(&T) -> String,
+) -> String {
+    value
+        .value()
+        .map(|v| {
+            format!(
+                "{}{}",
+                if value.quality() == crate::domain::Quality::Stale {
+                    "~"
+                } else {
+                    ""
+                },
+                format(v)
+            )
+        })
         .unwrap_or_else(|| "--".into())
 }

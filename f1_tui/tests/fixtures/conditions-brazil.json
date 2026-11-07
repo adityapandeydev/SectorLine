@@ -1,0 +1,306 @@
+{
+  "session_key": 9636,
+  "source_note": "T01 archived OpenF1 excerpts acquired 1 November 2026; bulk data remain outside Git",
+  "channels": [
+    {
+      "source": {
+        "url": "https://api.openf1.org/v1/race_control?session_key=9636",
+        "status": 200,
+        "retrieved_at_utc": "2026-11-01T17:43:44.499359+00:00",
+        "bytes": 28631,
+        "sha256": "ab6bf12fd26662ba855c6e892218ef3ffad43a639f4f2c0165c413587e21185a"
+      },
+      "rows": [
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T15:49:57.515000+00:00",
+          "driver_number": null,
+          "lap_number": 1,
+          "category": "SessionStatus",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "SESSION STARTED"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T16:28:21+00:00",
+          "driver_number": null,
+          "lap_number": 28,
+          "category": "SafetyCar",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "VIRTUAL SAFETY CAR DEPLOYED"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T16:29:50+00:00",
+          "driver_number": null,
+          "lap_number": 28,
+          "category": "SafetyCar",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "VIRTUAL SAFETY CAR ENDING"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T16:32:53+00:00",
+          "driver_number": null,
+          "lap_number": 30,
+          "category": "SafetyCar",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "SAFETY CAR DEPLOYED"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T16:37:21.752000+00:00",
+          "driver_number": null,
+          "lap_number": 32,
+          "category": "SessionStatus",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "SESSION ABORTED"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T16:37:22+00:00",
+          "driver_number": null,
+          "lap_number": 32,
+          "category": "Flag",
+          "flag": "RED",
+          "scope": "Track",
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "RED FLAG"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T17:02:00.390000+00:00",
+          "driver_number": null,
+          "lap_number": 33,
+          "category": "SessionStatus",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "SESSION STARTED"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T17:13:14+00:00",
+          "driver_number": null,
+          "lap_number": 39,
+          "category": "SafetyCar",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "SAFETY CAR DEPLOYED"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T17:18:04+00:00",
+          "driver_number": null,
+          "lap_number": 42,
+          "category": "SafetyCar",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "SAFETY CAR IN THIS LAP"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T17:56:52.172000+00:00",
+          "driver_number": null,
+          "lap_number": 69,
+          "category": "SessionStatus",
+          "flag": null,
+          "scope": null,
+          "sector": null,
+          "qualifying_phase": null,
+          "message": "SESSION FINISHED"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T15:31:01+00:00",
+          "driver_number": null,
+          "lap_number": 1,
+          "category": "Flag",
+          "flag": "YELLOW",
+          "scope": "Sector",
+          "sector": 5,
+          "qualifying_phase": null,
+          "message": "YELLOW IN TRACK SECTOR 5"
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "date": "2024-11-03T15:32:04+00:00",
+          "driver_number": null,
+          "lap_number": 1,
+          "category": "Flag",
+          "flag": "DOUBLE YELLOW",
+          "scope": "Sector",
+          "sector": 5,
+          "qualifying_phase": null,
+          "message": "DOUBLE YELLOW IN TRACK SECTOR 5"
+        }
+      ],
+      "purpose": "Small source-attributed excerpts; not a complete session or playable recording"
+    },
+    {
+      "source": {
+        "url": "https://api.openf1.org/v1/weather?session_key=9636",
+        "status": 200,
+        "retrieved_at_utc": "2026-11-01T17:44:10.538737+00:00",
+        "bytes": 42952,
+        "sha256": "a05f9c12460bca0c87aa7dd64124eeed729321bd439cbc7f3251fa88ff9084fe"
+      },
+      "rows": [
+        {
+          "date": "2024-11-03T14:38:25.648000+00:00",
+          "session_key": 9636,
+          "air_temperature": 22.2,
+          "track_temperature": 27.3,
+          "humidity": 86.0,
+          "pressure": 927.4,
+          "wind_direction": 0,
+          "meeting_key": 1249,
+          "wind_speed": 0.4,
+          "rainfall": 1
+        },
+        {
+          "date": "2024-11-03T16:18:25.972000+00:00",
+          "session_key": 9636,
+          "air_temperature": 22.0,
+          "track_temperature": 24.9,
+          "humidity": 79.0,
+          "pressure": 926.4,
+          "wind_direction": 154,
+          "meeting_key": 1249,
+          "wind_speed": 0.4,
+          "rainfall": 1
+        },
+        {
+          "date": "2024-11-03T17:58:26.311000+00:00",
+          "session_key": 9636,
+          "air_temperature": 20.5,
+          "track_temperature": 24.1,
+          "humidity": 89.0,
+          "pressure": 925.4,
+          "wind_direction": 160,
+          "meeting_key": 1249,
+          "wind_speed": 0.4,
+          "rainfall": 0
+        }
+      ],
+      "purpose": "Small source-attributed excerpts; not a complete session or playable recording"
+    },
+    {
+      "source": {
+        "url": "https://api.openf1.org/v1/stints?session_key=9636&driver_number=4",
+        "status": 200,
+        "retrieved_at_utc": "2026-11-01T17:44:08.033219+00:00",
+        "bytes": 453,
+        "sha256": "1479395f85676211d2afa4fa1707e57ab54e578056589fac0ef55b5b4b2341f2"
+      },
+      "rows": [
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "stint_number": 1,
+          "driver_number": 4,
+          "lap_start": 1,
+          "lap_end": 28,
+          "compound": "INTERMEDIATE",
+          "tyre_age_at_start": 3
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "stint_number": 2,
+          "driver_number": 4,
+          "lap_start": 29,
+          "lap_end": 32,
+          "compound": "INTERMEDIATE",
+          "tyre_age_at_start": 4
+        },
+        {
+          "meeting_key": 1249,
+          "session_key": 9636,
+          "stint_number": 3,
+          "driver_number": 4,
+          "lap_start": 33,
+          "lap_end": 69,
+          "compound": "INTERMEDIATE",
+          "tyre_age_at_start": 4
+        }
+      ],
+      "purpose": "Small source-attributed excerpts; not a complete session or playable recording"
+    },
+    {
+      "source": {
+        "url": "https://api.openf1.org/v1/pit?session_key=9636",
+        "status": 200,
+        "retrieved_at_utc": "2026-11-01T17:44:12.320890+00:00",
+        "bytes": 6361,
+        "sha256": "03ba3a7793d9b519462dedc27ea6b56d16e18eeacd4c1b6de5726db6624e3551"
+      },
+      "rows": [
+        {
+          "date": "2024-11-03T16:24:31.874000+00:00",
+          "session_key": 9636,
+          "lap_number": 24,
+          "driver_number": 16,
+          "meeting_key": 1249,
+          "lane_duration": 24.573,
+          "pit_duration": 24.573,
+          "stop_duration": 2.6
+        },
+        {
+          "date": "2024-11-03T16:26:10.648000+00:00",
+          "session_key": 9636,
+          "lap_number": 25,
+          "driver_number": 27,
+          "meeting_key": 1249,
+          "lane_duration": 25.369,
+          "pit_duration": 25.369,
+          "stop_duration": 2.9
+        },
+        {
+          "date": "2024-11-03T16:27:50.033000+00:00",
+          "session_key": 9636,
+          "lap_number": 26,
+          "driver_number": 43,
+          "meeting_key": 1249,
+          "lane_duration": 25.287,
+          "pit_duration": 25.287,
+          "stop_duration": 3.5
+        }
+      ],
+      "purpose": "Small source-attributed excerpts; not a complete session or playable recording"
+    }
+  ]
+}
