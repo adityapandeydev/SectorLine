@@ -7,6 +7,8 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, Wrap},
 };
 mod demo;
+mod driver;
+mod events;
 pub mod layout;
 mod recorded;
 mod shell;
@@ -21,6 +23,7 @@ pub enum View {
     Driver,
     Conditions,
     Track,
+    Events,
 }
 impl View {
     pub fn next(self, back: bool) -> Self {
@@ -29,9 +32,15 @@ impl View {
             Self::Driver => 1,
             Self::Conditions => 2,
             Self::Track => 3,
+            Self::Events => 4,
         };
-        [Self::Timing, Self::Driver, Self::Conditions, Self::Track]
-            [(index + if back { 3 } else { 1 }) % 4]
+        [
+            Self::Timing,
+            Self::Driver,
+            Self::Conditions,
+            Self::Track,
+            Self::Events,
+        ][(index + if back { 4 } else { 1 }) % 5]
     }
 }
 pub fn render(frame: &mut Frame, app: &App) {

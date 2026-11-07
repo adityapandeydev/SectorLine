@@ -22,6 +22,7 @@ pub(super) fn render(frame: &mut Frame, app: &App, r: &layout::Regions) {
         View::Driver => driver(frame, app, r.body),
         View::Conditions => conditions(frame, app, r.body),
         View::Track => super::track::demo(frame, app, r.body),
+        View::Events => super::events::demo(frame, app, r.body),
     }
 }
 fn timing(frame: &mut Frame, app: &App, area: Rect) {

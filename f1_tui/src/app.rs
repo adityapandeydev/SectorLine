@@ -50,6 +50,8 @@ pub struct App {
     pub panel_scroll: u16,
     pub map_rotation: f64,
     pub cell_aspect: f64,
+    pub event_selection: std::cell::Cell<Option<usize>>,
+    pub event_offset: std::cell::Cell<usize>,
     pub timing_offset: std::cell::Cell<usize>,
     pub navigation_input: Option<String>,
     pub navigation_error: Option<String>,
@@ -79,6 +81,8 @@ impl App {
             panel_scroll: 0,
             map_rotation: 0.0,
             cell_aspect: 2.0,
+            event_selection: std::cell::Cell::new(None),
+            event_offset: std::cell::Cell::new(0),
             timing_offset: std::cell::Cell::new(0),
             navigation_input: None,
             navigation_error: None,
@@ -196,6 +200,42 @@ impl App {
         if !self.show_session_modal
             && let Some(replay) = &mut self.prepared_recording
         {
+            if self.view == ui::View::Events {
+                let rows = replay.visible_events();
+                let selected = self
+                    .event_selection
+                    .get()
+                    .filter(|i| *i < rows.len())
+                    .unwrap_or(rows.len().saturating_sub(1));
+                let delta = match key.code {
+                    KeyCode::Up | KeyCode::Char('k') => Some(-1),
+                    KeyCode::Down | KeyCode::Char('j') => Some(1),
+                    KeyCode::PageUp => Some(-10),
+                    KeyCode::PageDown => Some(10),
+                    _ => None,
+                };
+                if let Some(delta) = delta {
+                    if !rows.is_empty() {
+                        let next = selected.saturating_add_signed(delta).min(rows.len() - 1);
+                        self.event_selection
+                            .set((next + 1 < rows.len()).then_some(next));
+                        self.panel_scroll = 0;
+                    }
+                    return AppAction::None;
+                }
+                if key.code == KeyCode::Enter {
+                    let target = rows
+                        .get(selected)
+                        .and_then(|e| e.seek_target(replay.timeline()));
+                    if let Some(target) = target
+                        && let Err(e) = replay.seek(target)
+                    {
+                        self.load_error = true;
+                        self.load_message = Some(e.to_string());
+                    }
+                    return AppAction::None;
+                }
+            }
             match key.code {
                 KeyCode::Char('g') => {
                     let _ = replay.pause();
@@ -412,6 +452,8 @@ impl App {
                     Ok(SessionResult::Demo(stream)) => {
                         self.panel_scroll = 0;
                         self.timing_offset.set(0);
+                        self.event_selection.set(None);
+                        self.event_offset.set(0);
                         self.navigation_input = None;
                         self.navigation_error = None;
                         self.prepared_recording = None;
@@ -438,6 +480,8 @@ impl App {
                     Ok(SessionResult::Recording(cache)) => {
                         self.panel_scroll = 0;
                         self.timing_offset.set(0);
+                        self.event_selection.set(None);
+                        self.event_offset.set(0);
                         self.navigation_input = None;
                         self.navigation_error = None;
                         self.prepared_recording = Some(*cache);

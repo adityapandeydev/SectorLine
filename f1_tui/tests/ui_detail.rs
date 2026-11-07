@@ -1,4 +1,5 @@
 use sectorline::{
+    app::App,
     data::openf1::{Channel, ChunkMetadata},
     domain::{
         conditions::*,
@@ -213,6 +214,38 @@ fn replay_variant(missing_sector: bool, pit_out: bool) -> RecordedReplay {
     )
     .unwrap()
 }
+fn app(at: u64) -> App {
+    let mut app = App::new(
+        sectorline::stream::TelemetryStream::load_from_dir(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../python_bridge/cache"),
+        )
+        .unwrap(),
+        false,
+    );
+    let mut r = replay();
+    r.seek(ElapsedMillis(at)).unwrap();
+    app.prepared_recording = Some(r);
+    app.view = sectorline::ui::View::Driver;
+    app
+}
+fn capture(app: &App, w: u16, h: u16) -> (String, ratatui::buffer::Buffer) {
+    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(w, h)).unwrap();
+    t.draw(|f| app.render(f)).unwrap();
+    let b = t.backend().buffer().clone();
+    let text = b
+        .content()
+        .chunks(w as usize)
+        .map(|r| {
+            r.iter()
+                .map(|c| c.symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    (text, b)
+}
 #[test]
 fn ui_detail_eligible_reference_respects_deletion_reinstatement_and_seek() {
     let mut r = replay();
@@ -260,6 +293,145 @@ fn ui_detail_history_does_not_fill_null_or_future_samples_with_zero() {
     assert_eq!(rows[0].speed_kmh, Some(200.0));
     assert!(rows[1].speed_kmh.is_none());
     assert_eq!(rows[2].speed_kmh, Some(210.0));
+}
+#[test]
+fn ui_detail_readout_distinguishes_neutral_brake_drs_unknown_and_missing() {
+    let mut app = app(2000);
+    let text = capture(&app, 80, 24).0;
+    assert!(text.contains("Gear N"));
+    assert!(text.contains("Brake on"));
+    assert!(text.contains("DRS unknown (9)"));
+    assert!(text.contains("age 1.000s"));
+    app.prepared_recording
+        .as_mut()
+        .unwrap()
+        .seek(ElapsedMillis(3000))
+        .unwrap();
+    let text = capture(&app, 80, 24).0;
+    assert!(text.contains("Gear --"));
+    assert!(text.contains("Brake --"));
+    assert!(text.contains("DRS --"));
+    app.prepared_recording
+        .as_mut()
+        .unwrap()
+        .seek(ElapsedMillis(4000))
+        .unwrap();
+    let text = capture(&app, 80, 24).0;
+    assert!(text.contains("Brake off"));
+    assert!(text.contains("DRS on"));
+}
+#[test]
+fn ui_detail_event_keyboard_seeks_availability_without_changing_driver() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let mut app = app(125000);
+    app.view = sectorline::ui::View::Events;
+    let driver = app.prepared_recording.as_ref().unwrap().selected();
+    capture(&app, 80, 24);
+    app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    let r = app.prepared_recording.as_ref().unwrap();
+    assert_eq!(r.frame().elapsed(), ElapsedMillis(120000));
+    assert_eq!(r.selected(), driver);
+    assert_eq!(
+        r.status(),
+        sectorline::replay::clock::PlaybackStatus::Paused
+    );
+    assert!(!capture(&app, 80, 24).0.contains("Pit visit"));
+}
+
+#[test]
+fn ui_detail_comparison_deltas_are_from_one_eligible_reference_lap() {
+    let mut app = app(121000);
+    let text = capture(&app, 144, 70).0;
+    assert!(text.contains("vs eligible PB L1"));
+    assert!(text.contains("Lap delta +3.000s"));
+    assert!(text.contains("S1 delta +1.000s"));
+    app.prepared_recording
+        .as_mut()
+        .unwrap()
+        .seek(ElapsedMillis(135000))
+        .unwrap();
+    assert!(capture(&app, 144, 70).0.contains("vs eligible PB L2"));
+    app.prepared_recording
+        .as_mut()
+        .unwrap()
+        .seek(ElapsedMillis(180000))
+        .unwrap();
+    let text = capture(&app, 144, 70).0;
+    assert!(text.contains("unverified"));
+    assert!(!text.contains("Lap delta"));
+}
+#[test]
+fn ui_detail_all_sizes_no_color_and_actual_cell_captures() {
+    let mut app = app(121000);
+    for color in [false, true] {
+        app.theme.color = color;
+        for (view, view_name) in [
+            (sectorline::ui::View::Driver, "driver"),
+            (sectorline::ui::View::Events, "events"),
+        ] {
+            app.view = view;
+            for (w, h, size) in [
+                (144, 44, "wide"),
+                (120, 36, "standard"),
+                (80, 24, "compact"),
+            ] {
+                let (text, buffer) = capture(&app, w, h);
+                assert!(text.contains("RECORDED SNAPSHOT"));
+                assert!(text.contains("SYNTHETIC DETAIL FIXTURE"));
+                assert!(text.lines().last().unwrap().contains("q quit"));
+                if !color {
+                    assert!(
+                        buffer
+                            .content()
+                            .iter()
+                            .all(|c| c.fg == ratatui::style::Color::Reset
+                                && c.bg == ratatui::style::Color::Reset)
+                    );
+                }
+                if color && let Some(root) = std::env::var_os("SECTORLINE_CAPTURE_DIR") {
+                    let root = std::path::PathBuf::from(root);
+                    std::fs::create_dir_all(&root).unwrap();
+                    std::fs::write(root.join(format!("t16-{view_name}-{size}.txt")), text).unwrap();
+                    let cells=buffer.content().iter().map(|c|serde_json::json!({"s":c.symbol(),"fg":format!("{:?}",c.fg),"bg":format!("{:?}",c.bg),"m":format!("{:?}",c.modifier)})).collect::<Vec<_>>();
+                    std::fs::write(
+                        root.join(format!("t16-{view_name}-{size}.json")),
+                        serde_json::to_vec(
+                            &serde_json::json!({"width":w,"height":h,"cells":cells}),
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                }
+            }
+        }
+    }
+}
+#[test]
+fn ui_detail_empty_history_and_events_do_not_show_future_or_a_fake_trace() {
+    let mut app = app(0);
+    let text = capture(&app, 144, 70).0;
+    assert!(text.contains("trace -- (no eligible values)"));
+    app.view = sectorline::ui::View::Events;
+    let text = capture(&app, 80, 24).0;
+    assert!(text.contains("0 available"));
+    assert!(!text.contains("Red"));
+    assert!(!text.contains("Completed L"));
+}
+
+#[test]
+fn ui_detail_missing_sectors_and_pit_out_laps_do_not_get_fake_deltas() {
+    let mut app = app(121000);
+    let mut r = replay_variant(true, false);
+    r.seek(ElapsedMillis(121000)).unwrap();
+    app.prepared_recording = Some(r);
+    let text = capture(&app, 144, 70).0;
+    assert!(text.contains("S1 delta +1.000s"));
+    assert!(text.contains("S2 delta --s"));
+    let mut r = replay_variant(false, true);
+    r.seek(ElapsedMillis(121000)).unwrap();
+    app.prepared_recording = Some(r);
+    assert!(!capture(&app, 144, 70).0.contains("Lap delta"));
 }
 #[test]
 fn ui_detail_conflicting_reports_are_not_rendered_as_a_resolved_flag() {

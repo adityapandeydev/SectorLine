@@ -349,3 +349,37 @@ geometry without independently stretching the map axes. Rotation has no implied
 geographic north. Unicode braille needs terminal font support; labels, selection
 and the basic ANSI/no-colour palette remain text based. Demo maps remain explicitly
 generated.
+
+
+## Driver details and evidence timeline
+
+Driver shows typed speed, RPM, gear (`N` is neutral), throttle, brake on/off and
+DRS on/off/eligible or its unknown source code. Missing values stay `--`; stale
+held values carry `~`, with sample age measured in replay time. Wider views put
+history beside the readout; use `[` / `]` to scroll compact views.
+
+Speed and throttle history plot admitted source points from the last ten seconds
+(up to 512 indexed observations), with no connecting lines or invented zeros.
+A blank means no eligible value at that plotted location. The displayed range
+comes from those source values; it is not a gauge or physical performance scale.
+The evidence section identifies the channel, quality and availability time.
+
+Lap/sector deltas compare the latest comparable completed lap against the best
+admitted, explicitly eligible personal lap, including the current lap. Sectors
+come from that same reference lap, not an invented combination of best sectors.
+Pit-out, deleted, conflicting or unverified laps do not produce comparisons;
+missing sectors stay missing. Provisional archive bests remain labelled `*`.
+
+The **Events** tab lists parsed control reports, completed laps, eligibility/status
+reports and recorded pit visits already available at the replay time. It is a
+normalized evidence timeline, not a verbatim feed of every provider message.
+Scope, report timestamp, source evidence, retrieval and known/estimated availability
+are explicit. Conflicting same-time reports stay unresolved. Retrieval is never
+used as the report's arrival time.
+
+Up/Down or j/k select a report; PgUp/PgDn move ten rows. Enter pauses and seeks to
+its **availability time**, so delayed reports are visible at the destination.
+Reports outside recording coverage cannot be jumped to. The latest row follows
+new reports; selecting an older row holds the browsing position. Backward seeks
+hide future reports and their counts. `[` / `]` scroll the selected evidence.
+Generated demos show no substitute provider event stream.
