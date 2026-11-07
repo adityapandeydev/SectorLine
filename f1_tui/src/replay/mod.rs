@@ -23,6 +23,7 @@ pub struct RecordedReplay {
     checkpoints: checkpoint::Checkpoints,
     laps: navigation::LapIndex,
     offset_ms: i64,
+    conditions: crate::domain::conditions::ConditionsFrame,
 }
 impl RecordedReplay {
     pub fn from_cache(
@@ -63,6 +64,8 @@ impl RecordedReplay {
             .driver
             .number
             .get();
+        let conditions =
+            timeline.conditions_at(ElapsedMillis(0), ReplayPolicy::EventTimeEstimates)?;
         let clock = PlaybackClock::new(timeline.end());
         Ok(Self {
             timeline,
@@ -75,7 +78,11 @@ impl RecordedReplay {
             checkpoints,
             laps,
             offset_ms: 0,
+            conditions,
         })
+    }
+    pub fn conditions(&self) -> &crate::domain::conditions::ConditionsFrame {
+        &self.conditions
     }
     pub fn timeline(&self) -> &Timeline {
         &self.timeline
@@ -104,7 +111,11 @@ impl RecordedReplay {
         }
         let state = self.checkpoints.restore(&self.timeline, target)?;
         let frame = state.frame(&self.timeline)?;
+        let conditions = self
+            .timeline
+            .conditions_at(target, ReplayPolicy::EventTimeEstimates)?;
         self.clock.seek(target, self.now)?;
+        self.conditions = conditions;
         self.state = state;
         self.frame = frame;
         Ok(())
@@ -172,6 +183,9 @@ impl RecordedReplay {
         }
         self.state.advance_to(&self.timeline, target)?;
         self.frame = self.state.frame(&self.timeline)?;
+        self.conditions = self
+            .timeline
+            .conditions_at(target, ReplayPolicy::EventTimeEstimates)?;
         Ok(true)
     }
     pub fn select(&mut self, delta: i32) {

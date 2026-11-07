@@ -43,6 +43,7 @@ pub struct Timeline {
     events: Vec<Event>,
     end: ElapsedMillis,
     report: NormalizationReport,
+    conditions: conditions::ConditionsArchive,
 }
 impl Timeline {
     pub fn new(
@@ -142,6 +143,7 @@ impl Timeline {
             events,
             end,
             report,
+            conditions: conditions::ConditionsArchive::default(),
         })
     }
     pub fn from_cache(
@@ -207,7 +209,7 @@ impl Timeline {
             .map(|e| e.observed)
             .min()
             .ok_or("Recording has no timestamped core observations")?;
-        let timeline = Self::new(
+        let mut timeline = Self::new(
             SessionId::new(
                 Provider::OpenF1,
                 cache.spec().request()?.session_key().to_string(),
@@ -217,8 +219,25 @@ impl Timeline {
             sources,
             events,
         )?;
+        timeline.conditions = conditions::ConditionsArchive::from_cache(cache, cancel)?;
         cancel.check()?;
         Ok(timeline)
+    }
+    pub fn with_conditions(mut self, archive: conditions::ConditionsArchive) -> Self {
+        self.conditions = archive;
+        self
+    }
+    pub fn conditions_at(
+        &self,
+        time: ElapsedMillis,
+        policy: ReplayPolicy,
+    ) -> Result<conditions::ConditionsFrame> {
+        self.conditions.frame(
+            &self.session,
+            self.origin,
+            time,
+            policy == ReplayPolicy::EventTimeEstimates,
+        )
     }
     pub fn origin(&self) -> UtcMillis {
         self.origin
@@ -432,6 +451,23 @@ impl SessionState {
                 c.driver.number,
             )
         });
+        let now = UtcMillis(
+            timeline
+                .origin
+                .0
+                .checked_add(i64::try_from(self.elapsed.0)?)
+                .ok_or("Replay time overflow")?,
+        );
+        for car in &mut cars {
+            car.speed_kmh = quality::at_replay_time(&car.speed_kmh, now, "car_data")?;
+            car.rpm = quality::at_replay_time(&car.rpm, now, "car_data")?;
+            car.gear = quality::at_replay_time(&car.gear, now, "car_data")?;
+            car.throttle = quality::at_replay_time(&car.throttle, now, "car_data")?;
+            car.brake = quality::at_replay_time(&car.brake, now, "car_data")?;
+            car.drs = quality::at_replay_time(&car.drs, now, "car_data")?;
+            car.gap_to_leader = quality::at_replay_time(&car.gap_to_leader, now, "intervals")?;
+            car.gap_to_ahead = quality::at_replay_time(&car.gap_to_ahead, now, "intervals")?;
+        }
         Ok(PlaybackFrame::new(
             PlaybackMode::Recorded,
             timeline.session.clone(),

@@ -7,6 +7,9 @@ use std::{
 };
 
 pub mod classification;
+pub mod conditions;
+pub mod quality;
+pub mod stints;
 mod legacy;
 pub mod normalize;
 pub mod timing;
