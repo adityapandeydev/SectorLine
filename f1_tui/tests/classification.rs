@@ -381,6 +381,7 @@ fn classification_cached_summaries_wait_for_completion_and_named_lap_decisions()
             false,
         );
         app.prepared_recording = Some(replay);
+        app.view = sectorline::ui::View::Driver;
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
         terminal.draw(|f| app.render(f)).unwrap();

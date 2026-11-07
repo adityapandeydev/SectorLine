@@ -541,6 +541,7 @@ fn conditions_cached_channels_seek_staleness_and_ui_match_independent_boundaries
         .unwrap();
         let mut app = sectorline::app::App::new(stream, false);
         app.prepared_recording = Some(replay);
+        app.view = sectorline::ui::View::Conditions;
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
         terminal.draw(|f| app.render(f)).unwrap();
@@ -553,8 +554,17 @@ fn conditions_cached_channels_seek_staleness_and_ui_match_independent_boundaries
             .collect::<String>();
         assert!(text.contains("~Green"));
         assert!(text.contains("Rain ~yes"));
-        assert!(text.contains("Tyre ~HARD"));
-        assert!(text.contains("phase unknown"));
+        app.view = sectorline::ui::View::Driver;
+        terminal.draw(|f| app.render(f)).unwrap();
+        let driver_text = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect::<String>();
+        assert!(driver_text.contains("Tyre ~HARD"));
+        assert!(driver_text.contains("phase unknown"));
         replay = app.prepared_recording.take().unwrap();
     }
     // Retain this explicitly synthetic cache for manual terminal verification; target is ignored.

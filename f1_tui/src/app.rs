@@ -43,6 +43,11 @@ pub struct App {
     pub load_error: bool,
     pub prepared_recording: Option<RecordedReplay>,
     now: Duration,
+    pub view: ui::View,
+    pub theme: ui::theme::Theme,
+    pub show_help: bool,
+    pub help_scroll: u16,
+    pub panel_scroll: u16,
     pub navigation_input: Option<String>,
     pub navigation_error: Option<String>,
 }
@@ -64,6 +69,11 @@ impl App {
             load_error: false,
             prepared_recording: None,
             now: Duration::ZERO,
+            view: ui::View::Timing,
+            theme: ui::theme::Theme::default(),
+            show_help: false,
+            help_scroll: 0,
+            panel_scroll: 0,
             navigation_input: None,
             navigation_error: None,
         }
@@ -110,6 +120,49 @@ impl App {
                 }
                 _ => {}
             }
+            return AppAction::None;
+        }
+        if self.show_help {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('?') => self.show_help = false,
+                KeyCode::Down | KeyCode::PageDown => {
+                    self.help_scroll = self.help_scroll.saturating_add(1).min(64)
+                }
+                KeyCode::Up | KeyCode::PageUp => {
+                    self.help_scroll = self.help_scroll.saturating_sub(1)
+                }
+                KeyCode::Char('q') => {
+                    self.should_quit = true;
+                    return AppAction::Quit;
+                }
+                _ => {}
+            }
+            return AppAction::None;
+        }
+        if !self.is_searching && key.code == KeyCode::Char('?') {
+            if let Some(replay) = &mut self.prepared_recording {
+                let _ = replay.pause();
+            } else {
+                self.stream.is_paused = true;
+            }
+            self.show_help = true;
+            self.help_scroll = 0;
+            return AppAction::None;
+        }
+        if !self.show_session_modal && matches!(key.code, KeyCode::Tab | KeyCode::BackTab) {
+            self.view = self.view.next(key.code == KeyCode::BackTab);
+            self.panel_scroll = 0;
+            return AppAction::None;
+        }
+        if !self.show_session_modal
+            && self.view != ui::View::Timing
+            && matches!(key.code, KeyCode::Char('[' | ']'))
+        {
+            self.panel_scroll = if key.code == KeyCode::Char(']') {
+                self.panel_scroll.saturating_add(1).min(256)
+            } else {
+                self.panel_scroll.saturating_sub(1)
+            };
             return AppAction::None;
         }
         if key.code == KeyCode::Esc && self.load_id.is_some() {
@@ -338,6 +391,7 @@ impl App {
                 self.load_id = None;
                 match result {
                     Ok(SessionResult::Demo(stream)) => {
+                        self.panel_scroll = 0;
                         self.navigation_input = None;
                         self.navigation_error = None;
                         self.prepared_recording = None;
@@ -362,6 +416,7 @@ impl App {
                         ));
                     }
                     Ok(SessionResult::Recording(cache)) => {
+                        self.panel_scroll = 0;
                         self.navigation_input = None;
                         self.navigation_error = None;
                         self.prepared_recording = Some(*cache);
