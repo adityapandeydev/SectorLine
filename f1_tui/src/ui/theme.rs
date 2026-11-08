@@ -3,11 +3,13 @@ use ratatui::style::{Color, Modifier, Style};
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
     pub color: bool,
+    pub ascii: bool,
 }
 impl Default for Theme {
     fn default() -> Self {
         Self {
             color: std::env::var_os("NO_COLOR").is_none(),
+            ascii: std::env::var_os("SECTORLINE_ASCII").is_some(),
         }
     }
 }

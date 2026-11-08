@@ -156,7 +156,11 @@ fn draw(frame: &mut Frame, app: &App, area: Rect, scene: Scene<'_>) {
     frame.render_widget(
         Canvas::default()
             .background_color(Color::Reset)
-            .marker(Marker::Braille)
+            .marker(if app.theme.ascii {
+                Marker::Dot
+            } else {
+                Marker::Braille
+            })
             .x_bounds([0.0, f64::from(plot.width - 1)])
             .y_bounds([0.0, f64::from(plot.height - 1)])
             .paint(|ctx| {

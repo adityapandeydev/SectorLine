@@ -383,3 +383,49 @@ Reports outside recording coverage cannot be jumped to. The latest row follows
 new reports; selecting an older row holds the browsing position. Backward seeks
 hide future reports and their counts. `[` / `]` scroll the selected evidence.
 Generated demos show no substitute provider event stream.
+
+
+## Terminal compatibility and cleanup
+
+Run the regular interface with plain ASCII and no semantic colours:
+
+```powershell
+cargo run --release --locked -p sectorline -- --ascii --no-color
+```
+
+`SECTORLINE_ASCII=1` and `NO_COLOR=1` provide the same options. ASCII mode uses
+regular dots/stars for maps and history, simple overlay borders, common Latin
+accent transliteration, and `?` for unsupported label glyphs. IDs and numeric
+values keep their slots. It needs no emoji, Nerd Font, image protocol or braille
+font. No-color mode keeps text markers, bold and reverse selection.
+
+Below 80×24, a resize/quit fallback replaces the workspace. Very small windows
+prioritize `q`; hidden text-entry controls cannot consume it. Restoring the size
+preserves the current session and driver. Help measures its wrapped content at
+the current size: PgUp/PgDn move a page and Up/Down a line.
+
+Interactive mode requires terminal input and output; redirected invocations get
+a clear error. `--demo`/`--headless`, `--help` and `--catalogue` remain usable
+without a TUI. A terminal guard restores raw input, alternate screen and cursor
+on normal/error returns and unwinding UI panics, including partial setup. Cleanup
+attempts every step even if another fails; failed steps are retried on drop.
+Cleanup failures are reported rather than masking an earlier runtime error.
+
+Ctrl-C input and OS interrupt signals request graceful shutdown; Unix termination
+signals are also handled. A caught loader-worker panic does not tear down the
+active UI. Quit cancels loading without joining an in-flight provider call.
+Forced process kills, panic-abort builds and a disconnected terminal cannot be
+promised graceful cleanup.
+
+For a disposable terminal/PTY lifecycle check, build and run the test example:
+
+```powershell
+cargo run --release --locked -p sectorline --example terminal_smoke -- normal
+```
+
+Other modes are `error`, `panic`, `startup-error`, `worker-panic` and `signal`.
+The failure modes are deliberate: the final `RESTORED` marker must say
+`raw_off=true`. `signal` waits up to 15 seconds for an OS interrupt (not a raw
+Ctrl-C input byte). These probes change terminal modes; run them in a separate
+test terminal. Windows ConPTY resize, quit, Ctrl-C, Ctrl-Break and restoration
+checks passed locally. Native Linux/macOS smoke verification remains pending.

@@ -72,3 +72,13 @@ impl Regions {
         }
     }
 }
+
+/// All overlays stay inside the body; zero widths never move outside it.
+pub fn overlay_rect(area: Rect) -> Rect {
+    Rect::new(
+        area.x.saturating_add(2.min(area.width)),
+        area.y,
+        area.width.saturating_sub(4),
+        area.height,
+    )
+}

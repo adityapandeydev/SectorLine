@@ -192,12 +192,7 @@ pub(super) fn render(frame: &mut Frame, app: &App, r: &layout::Regions) {
     frame.render_widget(Paragraph::new(help).style(app.theme.title()), r.help);
 }
 fn overlay(frame: &mut Frame, app: &App, area: Rect, title: &str) -> Rect {
-    let area = Rect::new(
-        area.x + 2,
-        area.y,
-        area.width.saturating_sub(4),
-        area.height,
-    );
+    let area = layout::overlay_rect(area);
     frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)
@@ -227,12 +222,15 @@ pub(super) fn navigation(frame: &mut Frame, app: &App, area: Rect) {
         inner,
     );
 }
+pub(super) fn help_text(app: &App) -> String {
+    format!(
+        "Playback\nSpace play/pause | Home restart paused\n1/2/5/0 speed: 1x / 2x / 5x / 10x\nLeft/Right seek 1s | PgUp/PgDn seek 60s (recorded)\n\nViews\nTab / Shift+Tab switch views | Up/Down or j/k select driver\n[ / ] scroll Driver, Conditions or event evidence\nEvents: Up/Down (j/k) reports; PgUp/PgDn 10 reports; Enter seeks availability\nEvents only expose reports already available; newest row follows latest\nDriver: typed values, sample age, eligible same-lap comparisons\nHistory: last10s admitted samples, points only; no connecting lines\ng go to time/lap/recording offset (recorded)\ns sessions | r retry last load | Esc cancel load/back\nq quit | Ctrl+C always quits\n--ascii or SECTORLINE_ASCII uses plain text maps, plots and borders\n--no-color or NO_COLOR disables the semantic palette\n\nSource and quality\n-- unavailable | ~ stale held value | ... column overflow | * provisional best\n\nTiming columns\nGap/Int in seconds; +nL means laps behind\nTy S/M/H/I/W soft/medium/hard/intermediate/wet; ? unrecognized\nAge tyre laps | Lap completed laps | Last seconds\nkm/h speed | AgeS telemetry observation age in seconds\nTm source team mnemonic; full name in Driver and Team key\nState RET/DNF/DNS/DSQ only when evidenced\nRecorded: event-time estimates; original delivery times unknown\nDemo: Generated simulation; no observed replay\nTrack: static observed lap trace from this recording; approximate XY\nCars use a 500ms display delay; interpolation endpoints already available\n~ held sample; missing or >2s old locations are hidden\nPit/unknown laps and gaps/jumps never interpolate\nTrack view: ,/. rotate 15deg; -/+ adjust cell height/width (default2)\n\nFull status\n{}\n\nEsc closes help; playback stays paused. Up/Down scroll.",
+        app.load_message.as_deref().unwrap_or("Ready")
+    )
+}
 pub(super) fn help(frame: &mut Frame, app: &App, area: Rect) {
     let inner = overlay(frame, app, area, " Help / full status ");
-    let text = format!(
-        "Playback\nSpace play/pause | Home restart paused\n1/2/5/0 speed: 1x / 2x / 5x / 10x\nLeft/Right seek 1s | PgUp/PgDn seek 60s (recorded)\n\nViews\nTab / Shift+Tab switch views | Up/Down or j/k select driver\n[ / ] scroll Driver, Conditions or event evidence\nEvents: Up/Down (j/k) reports; PgUp/PgDn 10 reports; Enter seeks availability\nEvents only expose reports already available; newest row follows latest\nDriver: typed values, sample age, eligible same-lap comparisons\nHistory: last10s admitted samples, points only; no connecting lines\ng go to time/lap/recording offset (recorded)\ns sessions | r retry last load | Esc cancel load/back\nq quit | Ctrl+C always quits\n\nSource and quality\n-- unavailable | ~ stale held value | ... column overflow | * provisional best\n\nTiming columns\nGap/Int in seconds; +nL means laps behind\nTy S/M/H/I/W soft/medium/hard/intermediate/wet; ? unrecognized\nAge tyre laps | Lap completed laps | Last seconds\nkm/h speed | AgeS telemetry observation age in seconds\nTm source team mnemonic; full name in Driver and Team key\nState RET/DNF/DNS/DSQ only when evidenced\nRecorded: event-time estimates; original delivery times unknown\nDemo: Generated simulation; no observed replay\nTrack: static observed lap trace from this recording; approximate XY\nCars use a 500ms display delay; interpolation endpoints already available\n~ held sample; missing or >2s old locations are hidden\nPit/unknown laps and gaps/jumps never interpolate\nTrack view: ,/. rotate 15deg; -/+ adjust cell height/width (default2)\n\nFull status\n{}\n\nEsc closes help; playback stays paused. Up/Down scroll.",
-        app.load_message.as_deref().unwrap_or("Ready")
-    );
+    let text = help_text(app);
     frame.render_widget(
         scroll(
             Paragraph::new(text)

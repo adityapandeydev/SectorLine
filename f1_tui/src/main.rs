@@ -46,6 +46,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  --year YYYY         Historical metadata year (default: 2026)");
         println!("  --help, -h          Show help");
         println!(
+            "  --ascii             Plain ASCII maps, plots and borders (or SECTORLINE_ASCII=1)"
+        );
+        println!("  --no-color          Text-only palette (or NO_COLOR=1)");
+        println!(
             "  --catalogue         Browse cached OpenF1 metadata (separate from demo playback)"
         );
         println!(
@@ -140,6 +144,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start_with_modal = !is_demo_mode && target_gp.is_none();
     let mut app = App::new(stream, start_with_modal);
+    app.theme.ascii |= args.iter().any(|a| a == "--ascii");
+    app.theme.color &= !args.iter().any(|a| a == "--no-color");
 
     // Headless / Demo Mode for non-interactive environments and CI/CD validation
     if is_demo_mode {

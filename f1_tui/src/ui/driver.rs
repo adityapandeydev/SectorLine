@@ -76,13 +76,13 @@ pub(super) fn recorded(frame: &mut Frame, app: &App, replay: &RecordedReplay, ar
             frame,
             app,
             history,
-            history_lines(replay, car, history.width),
+            history_lines(replay, car, history.width, app.theme.ascii),
         );
     } else {
         let mut lines = summary_lines(replay, car, body.width);
         if body.width >= 72 {
             lines.push(Line::raw(""));
-            lines.extend(history_lines(replay, car, body.width));
+            lines.extend(history_lines(replay, car, body.width, app.theme.ascii));
         }
         render_lines(frame, app, body, lines);
     }
@@ -280,7 +280,12 @@ fn summary_lines(replay: &RecordedReplay, car: &CarSample, width: u16) -> Vec<Li
     lines.push("* Provisional archive best; excluded from comparisons.".into());
     lines.into_iter().map(Line::raw).collect()
 }
-fn history_lines(replay: &RecordedReplay, car: &CarSample, width: u16) -> Vec<Line<'static>> {
+fn history_lines(
+    replay: &RecordedReplay,
+    car: &CarSample,
+    width: u16,
+    ascii: bool,
+) -> Vec<Line<'static>> {
     let rows = replay.telemetry_history();
     let now = replay
         .timeline()
@@ -291,11 +296,23 @@ fn history_lines(replay: &RecordedReplay, car: &CarSample, width: u16) -> Vec<Li
         "Telemetry history | {} admitted samples / 10s",
         rows.len()
     ))];
-    lines.extend(trace(&rows, now, width, "Speed km/h", |r| r.speed_kmh));
+    lines.extend(trace(
+        &rows,
+        now,
+        width,
+        "Speed km/h",
+        |r| r.speed_kmh,
+        ascii,
+    ));
     lines.push(Line::raw(""));
-    lines.extend(trace(&rows, now, width, "Throttle %", |r| {
-        r.throttle_percent
-    }));
+    lines.extend(trace(
+        &rows,
+        now,
+        width,
+        "Throttle %",
+        |r| r.throttle_percent,
+        ascii,
+    ));
     lines.push(Line::raw(
         "Points only; blanks have no eligible value. No connecting lines.",
     ));
@@ -330,6 +347,7 @@ fn trace(
     width: u16,
     label: &str,
     field: fn(&HistoryPoint) -> Option<f64>,
+    ascii: bool,
 ) -> Vec<Line<'static>> {
     let values = rows.iter().filter_map(field).collect::<Vec<_>>();
     if values.is_empty() {
@@ -339,18 +357,24 @@ fn trace(
     let max = values.iter().copied().reduce(f64::max).unwrap();
     let cols = usize::from(width.saturating_sub(2).clamp(1, 80));
     let mut dots = vec![0u8; cols * 3];
+    let x_max = if ascii { cols - 1 } else { cols * 2 - 1 };
+    let y_max = if ascii { 2 } else { 11 };
     for r in rows {
         let Some(v) = field(r) else {
             continue;
         };
-        let x = (((r.at.0 - now.saturating_sub(10000)) as f64 / 10000.0) * (cols * 2 - 1) as f64)
-            .clamp(0.0, (cols * 2 - 1) as f64) as usize;
+        let x = (((r.at.0 - now.saturating_sub(10000)) as f64 / 10000.0) * x_max as f64)
+            .clamp(0.0, x_max as f64) as usize;
         let y = if max == min {
-            5
+            y_max / 2
         } else {
-            ((max - v) / (max - min) * 11.0).round() as usize
+            ((max - v) / (max - min) * y_max as f64).round() as usize
         }
-        .min(11);
+        .min(y_max);
+        if ascii {
+            dots[y * cols + x] = 1;
+            continue;
+        }
         let bit = match (x % 2, y % 4) {
             (0, 0) => 0,
             (0, 1) => 1,
@@ -370,6 +394,8 @@ fn trace(
                 .map(|b| {
                     if *b == 0 {
                         ' '
+                    } else if ascii {
+                        '*'
                     } else {
                         char::from_u32(0x2800 + u32::from(*b)).unwrap()
                     }

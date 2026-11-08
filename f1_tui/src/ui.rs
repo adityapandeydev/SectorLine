@@ -6,6 +6,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, Wrap},
 };
+mod ascii;
 mod demo;
 mod driver;
 mod events;
@@ -44,13 +45,39 @@ impl View {
     }
 }
 pub fn render(frame: &mut Frame, app: &App) {
+    app.viewport.set(frame.area());
+    render_inner(frame, app);
+    if app.theme.ascii {
+        ascii::finish(frame);
+    }
+}
+pub(crate) fn help_metrics(app: &App) -> (u16, u16) {
+    let r = layout::Regions::new(app.viewport.get());
+    let area = Block::default()
+        .borders(Borders::ALL)
+        .inner(layout::overlay_rect(r.body));
+    let count = Paragraph::new(shell::help_text(app))
+        .wrap(Wrap { trim: false })
+        .line_count(area.width);
+    (
+        count
+            .saturating_sub(area.height as usize)
+            .min(u16::MAX as usize) as u16,
+        area.height.max(1),
+    )
+}
+fn render_inner(frame: &mut Frame, app: &App) {
     let regions = layout::Regions::new(frame.area());
     frame.render_widget(Block::default().style(app.theme.text()), frame.area());
     if regions.class == layout::SizeClass::Small {
         frame.render_widget(
-            Paragraph::new(
-                "Sector Line\nResize to at least 80x24 cells.\nq quit | Ctrl+C always quits",
-            )
+            Paragraph::new(if frame.area().width >= 40 && frame.area().height >= 3 {
+                "Sector Line\nResize to at least 80x24 cells.\nq quit | Ctrl+C always quits"
+            } else if frame.area().width >= 6 && frame.area().height >= 2 {
+                "80x24 needed\nq quit"
+            } else {
+                "q quit"
+            })
             .style(app.theme.text()),
             frame.area(),
         );
@@ -73,12 +100,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 }
 fn session_modal(frame: &mut Frame, app: &App, area: Rect) {
-    let area = Rect::new(
-        area.x + 2,
-        area.y,
-        area.width.saturating_sub(4),
-        area.height,
-    );
+    let area = layout::overlay_rect(area);
     frame.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)

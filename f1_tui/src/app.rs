@@ -47,6 +47,7 @@ pub struct App {
     pub theme: ui::theme::Theme,
     pub show_help: bool,
     pub help_scroll: u16,
+    pub viewport: std::cell::Cell<ratatui::layout::Rect>,
     pub panel_scroll: u16,
     pub map_rotation: f64,
     pub cell_aspect: f64,
@@ -78,6 +79,7 @@ impl App {
             theme: ui::theme::Theme::default(),
             show_help: false,
             help_scroll: 0,
+            viewport: std::cell::Cell::new(ratatui::layout::Rect::new(0, 0, 80, 24)),
             panel_scroll: 0,
             map_rotation: 0.0,
             cell_aspect: 2.0,
@@ -97,6 +99,13 @@ impl App {
         {
             self.should_quit = true;
             return AppAction::Quit;
+        }
+        if ui::layout::Regions::new(self.viewport.get()).class == ui::layout::SizeClass::Small {
+            if key.code == KeyCode::Char('q') {
+                self.should_quit = true;
+                return AppAction::Quit;
+            }
+            return AppAction::None;
         }
         if let Some(input) = &mut self.navigation_input {
             match key.code {
@@ -136,10 +145,18 @@ impl App {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('?') => self.show_help = false,
                 KeyCode::Down | KeyCode::PageDown => {
-                    self.help_scroll = self.help_scroll.saturating_add(1).min(64)
+                    let (max, page) = ui::help_metrics(self);
+                    let step = if key.code == KeyCode::PageDown {
+                        page
+                    } else {
+                        1
+                    };
+                    self.help_scroll = self.help_scroll.min(max).saturating_add(step).min(max);
                 }
                 KeyCode::Up | KeyCode::PageUp => {
-                    self.help_scroll = self.help_scroll.saturating_sub(1)
+                    let (max, page) = ui::help_metrics(self);
+                    let step = if key.code == KeyCode::PageUp { page } else { 1 };
+                    self.help_scroll = self.help_scroll.min(max).saturating_sub(step);
                 }
                 KeyCode::Char('q') => {
                     self.should_quit = true;
