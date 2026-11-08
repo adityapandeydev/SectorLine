@@ -1,0 +1,403 @@
+{
+  "purpose": "T01 attributed provider excerpts for T18 boundary checks; not complete session/query responses. Fixture roster uses only source driver number4 with unknown labels.",
+  "provider": "OpenF1",
+  "attribution": "https://openf1.org/docs/",
+  "source_manifest": "manifest.json",
+  "sessions": [
+    {
+      "label": "qualifying",
+      "session": {
+        "session_key": 9586,
+        "session_type": "Qualifying",
+        "session_name": "Qualifying",
+        "date_start": "2024-08-31T14:00:00+00:00",
+        "date_end": "2024-08-31T15:00:00+00:00",
+        "meeting_key": 1244,
+        "circuit_key": 39,
+        "circuit_short_name": "Monza",
+        "country_key": 13,
+        "country_code": "ITA",
+        "country_name": "Italy",
+        "location": "Monza",
+        "gmt_offset": "02:00:00",
+        "year": 2024,
+        "is_cancelled": false
+      },
+      "channels": {
+        "position": {
+          "original_url": "https://api.openf1.org/v1/position?session_key=9586&driver_number=4",
+          "retrieved_at_utc": "2026-11-01T17:44:21.169062+00:00",
+          "original_response_sha256": "aebcdda3f274377a3d43d0b174cae05b378d94a349a8f9d80c2a722ee8adfa69",
+          "rows": [
+            {
+              "date": "2024-08-31T13:49:07.507000+00:00",
+              "session_key": 9586,
+              "meeting_key": 1244,
+              "position": 5,
+              "driver_number": 4
+            },
+            {
+              "date": "2024-08-31T14:00:32.213000+00:00",
+              "session_key": 9586,
+              "meeting_key": 1244,
+              "position": 6,
+              "driver_number": 4
+            }
+          ]
+        },
+        "car_data": {
+          "original_url": "https://api.openf1.org/v1/car_data?session_key=9586&driver_number=4&date%3E=2024-08-31T14%3A10%3A00&date%3C=2024-08-31T14%3A11%3A00",
+          "retrieved_at_utc": "2026-11-01T17:44:23.681773+00:00",
+          "original_response_sha256": "a8bf003a5b9cdc1225901f60d4e538b169f1c36bd5e2994a284db072ae0888a2",
+          "rows": [
+            {
+              "date": "2024-08-31T14:10:00.077000+00:00",
+              "session_key": 9586,
+              "speed": 0,
+              "meeting_key": 1244,
+              "driver_number": 4,
+              "rpm": 0,
+              "brake": 104,
+              "throttle": 104,
+              "drs": 8,
+              "n_gear": 0
+            },
+            {
+              "date": "2024-08-31T14:10:00.277000+00:00",
+              "session_key": 9586,
+              "speed": 0,
+              "meeting_key": 1244,
+              "driver_number": 4,
+              "rpm": 0,
+              "brake": 104,
+              "throttle": 104,
+              "drs": 8,
+              "n_gear": 0
+            }
+          ]
+        },
+        "laps": {
+          "original_url": "https://api.openf1.org/v1/laps?session_key=9586&driver_number=4",
+          "retrieved_at_utc": "2026-11-01T17:44:16.749682+00:00",
+          "original_response_sha256": "9f092a172b14328bd60a9f79966ba25980005feca1db3afc9d7536ee6a6a01e8",
+          "rows": [
+            {
+              "meeting_key": 1244,
+              "session_key": 9586,
+              "driver_number": 4,
+              "lap_number": 1,
+              "date_start": "2024-08-31T14:03:14.074000+00:00",
+              "duration_sector_1": null,
+              "duration_sector_2": 37.116,
+              "duration_sector_3": 32.914,
+              "i1_speed": 262,
+              "i2_speed": 286,
+              "is_pit_out_lap": true,
+              "lap_duration": null,
+              "segments_sector_1": [
+                2064,
+                2064,
+                2049,
+                2049,
+                2049,
+                2049
+              ],
+              "segments_sector_2": [
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2049
+              ],
+              "segments_sector_3": [
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2051,
+                2049,
+                2051
+              ],
+              "st_speed": 136
+            },
+            {
+              "meeting_key": 1244,
+              "session_key": 9586,
+              "driver_number": 4,
+              "lap_number": 2,
+              "date_start": "2024-08-31T14:05:09.910000+00:00",
+              "duration_sector_1": 26.484,
+              "duration_sector_2": 26.898,
+              "duration_sector_3": 26.529,
+              "i1_speed": 325,
+              "i2_speed": 337,
+              "is_pit_out_lap": false,
+              "lap_duration": 79.911,
+              "segments_sector_1": [
+                2049,
+                2049,
+                2049,
+                2051,
+                2049,
+                2049
+              ],
+              "segments_sector_2": [
+                2049,
+                2049,
+                2049,
+                2051,
+                2049,
+                2049,
+                2049
+              ],
+              "segments_sector_3": [
+                2051,
+                2051,
+                2049,
+                2049,
+                2051,
+                2048,
+                2048
+              ],
+              "st_speed": 346
+            }
+          ]
+        },
+        "race_control": {
+          "original_url": "https://api.openf1.org/v1/race_control?session_key=9586",
+          "retrieved_at_utc": "2026-11-01T17:44:18.936726+00:00",
+          "original_response_sha256": "67470ea1b19bb86f376227f03b77f5c6706c68527bda158919a16d7ea098e486",
+          "rows": [
+            {
+              "meeting_key": 1244,
+              "session_key": 9586,
+              "date": "2024-08-31T14:00:00+00:00",
+              "driver_number": null,
+              "lap_number": null,
+              "category": "Flag",
+              "flag": "GREEN",
+              "scope": "Track",
+              "sector": null,
+              "qualifying_phase": 1,
+              "message": "GREEN LIGHT - PIT EXIT OPEN"
+            },
+            {
+              "meeting_key": 1244,
+              "session_key": 9586,
+              "date": "2024-08-31T14:00:00.070000+00:00",
+              "driver_number": null,
+              "lap_number": null,
+              "category": "SessionStatus",
+              "flag": null,
+              "scope": null,
+              "sector": null,
+              "qualifying_phase": 1,
+              "message": "SESSION STARTED"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "practice",
+      "session": {
+        "session_key": 9583,
+        "session_type": "Practice",
+        "session_name": "Practice 1",
+        "date_start": "2024-08-30T11:30:00+00:00",
+        "date_end": "2024-08-30T12:30:00+00:00",
+        "meeting_key": 1244,
+        "circuit_key": 39,
+        "circuit_short_name": "Monza",
+        "country_key": 13,
+        "country_code": "ITA",
+        "country_name": "Italy",
+        "location": "Monza",
+        "gmt_offset": "02:00:00",
+        "year": 2024,
+        "is_cancelled": false
+      },
+      "channels": {
+        "position": {
+          "original_url": "https://api.openf1.org/v1/position?session_key=9583&driver_number=4",
+          "retrieved_at_utc": "2026-11-01T17:44:43.246622+00:00",
+          "original_response_sha256": "607b9819ef505419f129ace6a94a40e67e8ea2135892bb2a48dca8750866893f",
+          "rows": [
+            {
+              "date": "2024-08-30T11:15:42.498000+00:00",
+              "session_key": 9583,
+              "driver_number": 4,
+              "meeting_key": 1244,
+              "position": 3
+            },
+            {
+              "date": "2024-08-30T11:30:02.742000+00:00",
+              "session_key": 9583,
+              "driver_number": 4,
+              "meeting_key": 1244,
+              "position": 4
+            }
+          ]
+        },
+        "car_data": {
+          "original_url": "https://api.openf1.org/v1/car_data?session_key=9583&driver_number=4&date%3E=2024-08-30T11%3A40%3A00&date%3C=2024-08-30T11%3A41%3A00",
+          "retrieved_at_utc": "2026-11-01T17:44:45.689305+00:00",
+          "original_response_sha256": "04af16f49ff7dfce09ab9209f63f51d7eccc9e13941cc73bfe98d4309ae615cf",
+          "rows": [
+            {
+              "date": "2024-08-30T11:40:00.130000+00:00",
+              "session_key": 9583,
+              "throttle": 74,
+              "speed": 250,
+              "rpm": 11398,
+              "brake": 0,
+              "n_gear": 6,
+              "meeting_key": 1244,
+              "driver_number": 4,
+              "drs": 9
+            },
+            {
+              "date": "2024-08-30T11:40:00.410000+00:00",
+              "session_key": 9583,
+              "throttle": 72,
+              "speed": 252,
+              "rpm": 11546,
+              "brake": 0,
+              "n_gear": 6,
+              "meeting_key": 1244,
+              "driver_number": 4,
+              "drs": 9
+            }
+          ]
+        },
+        "laps": {
+          "original_url": "https://api.openf1.org/v1/laps?session_key=9583&driver_number=4",
+          "retrieved_at_utc": "2026-11-01T17:44:38.810717+00:00",
+          "original_response_sha256": "c077b4b134308d82298ce64b7967a8105d4371e5a4501625c8346649d33ed2c3",
+          "rows": [
+            {
+              "meeting_key": 1244,
+              "session_key": 9583,
+              "driver_number": 4,
+              "lap_number": 1,
+              "date_start": "2024-08-30T11:30:29.119000+00:00",
+              "duration_sector_1": null,
+              "duration_sector_2": 36.013,
+              "duration_sector_3": 48.175,
+              "i1_speed": 305,
+              "i2_speed": 216,
+              "is_pit_out_lap": true,
+              "lap_duration": null,
+              "segments_sector_1": [
+                2064,
+                2064,
+                2049,
+                2049,
+                2049,
+                2049
+              ],
+              "segments_sector_2": [
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2049
+              ],
+              "segments_sector_3": [
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2051
+              ],
+              "st_speed": 90
+            },
+            {
+              "meeting_key": 1244,
+              "session_key": 9583,
+              "driver_number": 4,
+              "lap_number": 2,
+              "date_start": "2024-08-30T11:32:54.327000+00:00",
+              "duration_sector_1": 27.438,
+              "duration_sector_2": 28.783,
+              "duration_sector_3": 28.15,
+              "i1_speed": 314,
+              "i2_speed": 325,
+              "is_pit_out_lap": false,
+              "lap_duration": 84.371,
+              "segments_sector_1": [
+                2049,
+                2049,
+                2049,
+                2049,
+                2049,
+                2049
+              ],
+              "segments_sector_2": [
+                2051,
+                2049,
+                2049,
+                2051,
+                2049,
+                2049,
+                2049
+              ],
+              "segments_sector_3": [
+                2051,
+                2051,
+                2049,
+                2049,
+                2049,
+                2048,
+                2048,
+                2048
+              ],
+              "st_speed": 342
+            }
+          ]
+        },
+        "race_control": {
+          "original_url": "https://api.openf1.org/v1/race_control?session_key=9583",
+          "retrieved_at_utc": "2026-11-01T17:44:41.042742+00:00",
+          "original_response_sha256": "fcf4e0ad54f891d6a4a2f6d2cf931a1fbb7ea6c99e220cb31ceb279d57835555",
+          "rows": [
+            {
+              "meeting_key": 1244,
+              "session_key": 9583,
+              "date": "2024-08-30T11:30:00+00:00",
+              "driver_number": null,
+              "lap_number": null,
+              "category": "Flag",
+              "flag": "GREEN",
+              "scope": "Track",
+              "sector": null,
+              "qualifying_phase": null,
+              "message": "GREEN LIGHT - PIT EXIT OPEN"
+            },
+            {
+              "meeting_key": 1244,
+              "session_key": 9583,
+              "date": "2024-08-30T11:30:00.089000+00:00",
+              "driver_number": null,
+              "lap_number": null,
+              "category": "SessionStatus",
+              "flag": null,
+              "scope": null,
+              "sector": null,
+              "qualifying_phase": null,
+              "message": "SESSION STARTED"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

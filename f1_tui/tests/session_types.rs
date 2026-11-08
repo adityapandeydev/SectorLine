@@ -341,3 +341,244 @@ fn session_types_non_race_tables_hide_gaps_and_expose_partial_capabilities() {
         }
     }
 }
+
+struct CacheRoot(std::path::PathBuf);
+impl Drop for CacheRoot {
+    fn drop(&mut self) {
+        if std::env::var_os("SECTORLINE_CAPTURE_DIR").is_none() {
+            std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+}
+fn native_excerpt(
+    label: &str,
+) -> (
+    CacheRoot,
+    sectorline::replay::RecordedReplay,
+    serde_json::Value,
+) {
+    use sectorline::{
+        data::{
+            cache::{CacheSpec, CacheWriter},
+            limits::Cancellation,
+            openf1::{Channel, ChunkMetadata, Window},
+        },
+        domain::normalize::utc_millis_ceiling,
+        replay::RecordedReplay,
+    };
+    use serde_json::json;
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/session-types.json")).unwrap();
+    let e = fixture["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["label"] == label)
+        .unwrap()
+        .clone();
+    let session = &e["session"];
+    let key = session["session_key"].as_u64().unwrap() as u32;
+    let meeting = session["meeting_key"].as_u64().unwrap() as u32;
+    let start = utc_millis_ceiling(session["date_start"].as_str().unwrap()).unwrap();
+    let end = utc_millis_ceiling(session["date_end"].as_str().unwrap()).unwrap();
+    let window = Window::new(UtcMillis(start.0 - 3600000), UtcMillis(end.0 + 3600000)).unwrap();
+    let channels = Channel::ALL.to_vec();
+    let spec = CacheSpec::new(
+        key,
+        meeting,
+        2024,
+        (
+            session["session_name"].as_str().unwrap(),
+            session["session_type"].as_str().unwrap(),
+        ),
+        window,
+        std::time::Duration::from_secs(300),
+        channels.clone(),
+    )
+    .unwrap();
+    let root = CacheRoot(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../target/t18-excerpt-{label}-{}",
+            std::process::id()
+        )),
+    );
+    let mut writer = CacheWriter::begin(&root.0, &spec).unwrap();
+    for channel in channels {
+        let windows = if matches!(
+            channel,
+            Channel::CarData | Channel::Location | Channel::Intervals
+        ) {
+            (0..36)
+                .map(|n| {
+                    Some(
+                        Window::new(
+                            UtcMillis(window.start().0 + n * 300000),
+                            UtcMillis(window.start().0 + (n + 1) * 300000),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        } else {
+            vec![None]
+        };
+        let rows = if channel == Channel::Drivers {
+            vec![
+                json!({"session_key":key,"meeting_key":meeting,"driver_number":4,"name_acronym":"--","full_name":"--","team_name":"--"}),
+            ]
+        } else {
+            e["channels"][channel.endpoint()]["rows"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        };
+        let retrieved = e["channels"][channel.endpoint()]["retrieved_at_utc"]
+            .as_str()
+            .map(|s| utc_millis_ceiling(s).unwrap())
+            .unwrap_or(UtcMillis(1793548800000));
+        for w in windows {
+            let mut url = format!(
+                "https://api.openf1.org/v1/{}?session_key={key}",
+                channel.endpoint()
+            );
+            if let Some(w) = w {
+                let fmt = |t: UtcMillis| {
+                    chrono::DateTime::from_timestamp_millis(t.0)
+                        .unwrap()
+                        .format("%Y-%m-%dT%H:%M:%S%.3f")
+                        .to_string()
+                };
+                url.push_str(&format!("&date>={}&date<{}", fmt(w.start()), fmt(w.end())));
+            }
+            let selected = rows
+                .iter()
+                .filter(|r| {
+                    w.is_none_or(|w| {
+                        let t = utc_millis_ceiling(r["date"].as_str().unwrap()).unwrap();
+                        t >= w.start() && t < w.end()
+                    })
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            writer
+                .import(
+                    ChunkMetadata {
+                        channel,
+                        session_key: key,
+                        meeting_key: meeting,
+                        window: w,
+                        source_url: url,
+                        retrieved_at: retrieved,
+                        status: 200,
+                        attempts: 1,
+                    },
+                    &serde_json::to_vec(&selected).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+    let cache = writer.finish().unwrap();
+    let replay = RecordedReplay::from_cache(
+        &cache,
+        format!("{label} EXCERPT - partial test fixture"),
+        &Cancellation::default(),
+        &|_, _| {},
+    )
+    .unwrap();
+    let context = SessionContext::from_names(
+        SessionId::new(Provider::OpenF1, key.to_string()).unwrap(),
+        session["session_name"].as_str().unwrap(),
+        session["session_type"].as_str().unwrap(),
+    )
+    .with_schedule(start, end)
+    .unwrap();
+    let replay = replay.with_context(context).unwrap();
+    if std::env::var_os("SECTORLINE_CAPTURE_DIR").is_some() {
+        std::fs::write(
+            root.0
+                .parent()
+                .unwrap()
+                .join(format!("t18-{label}-root.txt")),
+            root.0.to_str().unwrap(),
+        )
+        .unwrap();
+        let catalogue = json!({"version":1,"retrieved_at_ms":1793548800000_i64,"loaded_years":[2024],"meetings":[{"meeting_key":meeting,"year":2024,"meeting_name":"PARTIAL REAL-SOURCE EXCERPT FIXTURE","circuit_short_name":"Monza","location":"Monza","country_name":"Italy"}],"sessions":[session]});
+        std::fs::write(
+            root.0
+                .parent()
+                .unwrap()
+                .join(format!("t18-{label}-catalogue.json")),
+            serde_json::to_vec(&catalogue).unwrap(),
+        )
+        .unwrap();
+    }
+    (root, replay, e)
+}
+#[test]
+fn session_types_native_qualifying_and_practice_excerpts_match_fixed_boundaries() {
+    use sectorline::domain::normalize::utc_millis_ceiling;
+    for (label, boundary, duration, position) in [
+        ("qualifying", "2024-08-31T14:06:29.821Z", 79.911, 6),
+        // Conservative millisecond ceiling of the source sector sum delays by 1 ms.
+        ("practice", "2024-08-30T11:34:18.699Z", 84.371, 4),
+    ] {
+        let (_root, mut r, raw) = native_excerpt(label);
+        let at = utc_millis_ceiling(boundary).unwrap().0 - r.timeline().origin().0;
+        r.seek(ElapsedMillis(at as u64 - 1)).unwrap();
+        assert!(
+            !r.timing_bests().contains_key(&4),
+            "No best before completed-lap evidence"
+        );
+        r.seek(ElapsedMillis(at as u64)).unwrap();
+        let best = r.timing_bests()[&4].clone();
+        assert_eq!(best.duration.get(), duration);
+        assert_eq!(
+            best.eligibility,
+            sectorline::domain::timing::Eligibility::Unknown
+        );
+        assert!(r.eligible_reference().is_none());
+        assert_eq!(
+            r.frame().samples()[0].position.value().unwrap().get(),
+            position
+        );
+        assert_eq!(
+            r.context().schedule.as_ref().unwrap().end.0
+                - r.context().schedule.as_ref().unwrap().start.0,
+            3600000
+        );
+        assert_ne!(r.frame().elapsed().0, 3600000);
+        if label == "qualifying" {
+            assert_eq!(r.phase().part, Some(1));
+        }
+        let mut app = app(r);
+        for (w, h) in [(144, 44), (120, 36), (80, 24)] {
+            let text = capture(&app, w, h);
+            assert!(text.contains("Best(s)"));
+            assert!(text.contains("Rpt"));
+            assert!(!text.contains("Gap(s)"));
+            assert!(!text.contains("Int(s)"));
+            assert!(text.contains(&format!("{duration:.3}*")));
+            assert!(text.contains("sched 60:00.000"));
+        }
+        let car = &raw["channels"]["car_data"]["rows"][0];
+        let at = utc_millis_ceiling(car["date"].as_str().unwrap()).unwrap().0
+            - app
+                .prepared_recording
+                .as_ref()
+                .unwrap()
+                .timeline()
+                .origin()
+                .0;
+        let r = app.prepared_recording.as_mut().unwrap();
+        r.seek(ElapsedMillis(at as u64)).unwrap();
+        assert_eq!(
+            r.frame().samples()[0].speed_kmh.value().unwrap().get(),
+            car["speed"].as_f64().unwrap()
+        );
+        if label == "qualifying" {
+            assert!(r.frame().samples()[0].brake.value().is_none());
+            assert!(r.frame().samples()[0].throttle.value().is_none());
+            assert_eq!(r.frame().samples()[0].gear.value().unwrap().get(), 0);
+        }
+    }
+}
