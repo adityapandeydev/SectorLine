@@ -1,16 +1,15 @@
 use crossterm::event::{self, Event};
-use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
-use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 use std::env;
-use std::io::stdout;
+use std::io::{IsTerminal, stdout};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use sectorline::app::App;
-use sectorline::stream::TelemetryStream;
 use sectorline::loader::session::{SessionRequest, WorkerConfig, session_loader};
+use sectorline::stream::TelemetryStream;
+use sectorline::terminal::{PanicCleanup, Shutdown, SystemControl, TerminalSession};
 
 fn find_cache_dir() -> PathBuf {
     let candidate_paths = [
@@ -36,24 +35,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("Sector Line - recorded timing and generated demo");
-        println!("Generated demo playback is simulated. Recorded timing uses explicit event-time estimates.");
+        println!(
+            "Generated demo playback is simulated. Recorded timing uses explicit event-time estimates."
+        );
         println!("Usage: sectorline [--demo] [--gp NAME] [--year YYYY]");
         println!("  --demo, --headless  Run 20 generated frames without opening the TUI");
-        println!("  --gp NAME           Generate a demo using historical session metadata (Python required)");
+        println!(
+            "  --gp NAME           Generate a demo using historical session metadata (Python required)"
+        );
         println!("  --year YYYY         Historical metadata year (default: 2026)");
         println!("  --help, -h          Show help");
-        println!("  --catalogue         Browse cached OpenF1 metadata (separate from demo playback)");
-        println!("    --refresh [--year YYYY]  Fetch meetings and optionally that exact year's sessions");
-        println!("    --year YYYY --search TEXT --session ID  Filter metadata/select an exact ID offline");
+        println!(
+            "  --catalogue         Browse cached OpenF1 metadata (separate from demo playback)"
+        );
+        println!(
+            "    --refresh [--year YYYY]  Fetch meetings and optionally that exact year's sessions"
+        );
+        println!(
+            "    --year YYYY --search TEXT --session ID  Filter metadata/select an exact ID offline"
+        );
         println!("    --catalogue-cache PATH  Override the user catalogue cache path");
         println!("Live access is unavailable; --live and --gp live are disabled.");
-        println!("Without options, open cached demo and catalogue search. Recordings open paused; Space plays, 1/2/5/0 set speed, Home restarts.");
-        println!("  --recording-root PATH  Override the recording cache for the interactive loader");
+        println!(
+            "Without options, open cached demo and catalogue search. Recordings open paused; Space plays, 1/2/5/0 set speed, Home restarts."
+        );
+        println!(
+            "  --recording-root PATH  Override the recording cache for the interactive loader"
+        );
         println!("  --prepare-session ID   Prepare an exact catalogue recording in the background");
         return Ok(());
     }
 
-    if args.iter().any(|a| a == "--live" || a.eq_ignore_ascii_case("--gp=live")) {
+    if args
+        .iter()
+        .any(|a| a == "--live" || a.eq_ignore_ascii_case("--gp=live"))
+    {
         return Err(sectorline::live::LIVE_UNAVAILABLE.into());
     }
     if args.iter().any(|a| a == "--catalogue") {
@@ -90,13 +106,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         i += 1;
     }
 
-    if target_gp.as_deref().is_some_and(|gp| gp.eq_ignore_ascii_case("live")) {
+    if target_gp
+        .as_deref()
+        .is_some_and(|gp| gp.eq_ignore_ascii_case("live"))
+    {
         return Err(sectorline::live::LIVE_UNAVAILABLE.into());
     }
 
     println!("Sector Line - DEMO | Generated car movement and telemetry; not observed replay.");
     let stream = if let Some(ref gp) = target_gp {
-        if let Some(s) = sectorline::live::LiveTelemetryClient::ensure_circuit_ready(&cache_dir, gp, target_year, "R")? {
+        if let Some(s) = sectorline::live::LiveTelemetryClient::ensure_circuit_ready(
+            &cache_dir,
+            gp,
+            target_year,
+            "R",
+        )? {
             s
         } else {
             TelemetryStream::load_from_dir(&cache_dir)?
@@ -151,6 +175,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(path) => path,
         None => sectorline::data::paths::session_cache_root().map_err(|e| e.to_string())?,
     };
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return Err("Interactive mode needs a terminal. Use --demo for headless verification or --catalogue for metadata.".into());
+    }
+    let shutdown = Shutdown::install()?;
     let loader = session_loader(WorkerConfig {
         demo_dir: cache_dir.clone(),
         catalogue_path,
@@ -167,11 +195,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.show_session_modal = false;
     }
 
-    // Interactive Terminal Setup
-    enable_raw_mode()?;
-    let mut out = stdout();
-    execute!(out, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(out);
+    let _panic_cleanup = PanicCleanup::install();
+    let mut terminal_session = TerminalSession::start(SystemControl)?;
+    let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend)?;
 
     let started = Instant::now();
@@ -183,9 +209,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Main Interactive Render Loop
     let run_res = (|| -> Result<(), Box<dyn std::error::Error>> {
         loop {
+            if shutdown.requested() {
+                break;
+            }
             dirty |= app.update_at(started.elapsed());
             if let Some(event) = loader.poll() {
+                let failed = matches!(
+                    &event,
+                    sectorline::loader::LoaderEvent::Finished { result: Err(_), .. }
+                );
                 app.accept_loader_event(event);
+                if failed {
+                    terminal.clear()?;
+                }
                 dirty = true;
             }
             if dirty && last_draw.elapsed() >= tick_rate {
@@ -250,10 +286,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })();
 
     loader.cancel();
-    // Terminal Teardown
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
-
-    run_res
+    let cleanup = terminal_session.restore();
+    match (run_res, cleanup) {
+        (Err(error), Err(cleanup)) => {
+            Err(format!("{error}; terminal cleanup also failed: {cleanup}").into())
+        }
+        (Err(error), _) => Err(error),
+        (Ok(()), Err(error)) => Err(error.into()),
+        (Ok(()), Ok(())) => Ok(()),
+    }
 }

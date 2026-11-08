@@ -6,6 +6,7 @@ pub mod loader;
 pub mod models;
 pub mod replay;
 pub mod stream;
+pub mod terminal;
 pub mod track;
 pub mod ui;
 
