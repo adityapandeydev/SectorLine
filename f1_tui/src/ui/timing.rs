@@ -101,9 +101,12 @@ pub(super) fn render(
             column("AgeS", 5, true, |r| &r.sample_age),
         ]);
     }
-    columns.push(column("State", if race { 5 } else { 4 }, false, |r| {
-        &r.status
-    }));
+    columns.push(column(
+        if race { "State" } else { "St" },
+        if race { 5 } else { 4 },
+        false,
+        |r| &r.status,
+    ));
     let header = Row::new(columns.iter().map(|c| {
         Cell::from(Line::raw(c.title).alignment(if c.right {
             Alignment::Right

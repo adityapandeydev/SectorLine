@@ -555,6 +555,14 @@ fn session_types_native_qualifying_and_practice_excerpts_match_fixed_boundaries(
             let text = capture(&app, w, h);
             assert!(text.contains("Best(s)"));
             assert!(text.contains("Rpt"));
+            assert!(
+                !text
+                    .lines()
+                    .find(|line| line.contains("Rpt") && line.contains("Best(s)"))
+                    .unwrap()
+                    .contains("Stat"),
+                "Nonrace status header must fit its four-cell slot"
+            );
             assert!(!text.contains("Gap(s)"));
             assert!(!text.contains("Int(s)"));
             assert!(text.contains(&format!("{duration:.3}*")));
