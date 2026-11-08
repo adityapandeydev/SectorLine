@@ -90,6 +90,7 @@ pub struct Control {
 pub struct ConditionsArchive {
     pub weather: Vec<Reading<Weather>>,
     pub control: Vec<Reading<Control>>,
+    pub phases: Vec<Reading<capabilities::PhaseUpdate>>,
     pub stints: BTreeMap<u32, Vec<Reading<Stint>>>,
     pub pits: BTreeMap<u32, Vec<Reading<PitRecord>>>,
     pub completed_laps: BTreeMap<u32, Vec<(u32, UtcMillis)>>,

@@ -6,6 +6,7 @@ use std::{
     num::{NonZeroU16, NonZeroU32},
 };
 
+pub mod capabilities;
 pub mod classification;
 pub mod geometry;
 pub mod conditions;

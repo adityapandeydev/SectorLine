@@ -20,6 +20,15 @@ fn time(row: &Value, key: &str) -> Option<UtcMillis> {
 impl ConditionsArchive {
     pub fn from_cache(cache: &SessionCache, cancel: &Cancellation) -> Result<Self> {
         let mut archive = Self::default();
+        let qualifying = capabilities::SessionContext::from_names(
+            SessionId::new(
+                Provider::OpenF1,
+                cache.spec().request()?.session_key().to_string(),
+            )?,
+            cache.spec().session_name(),
+            cache.spec().session_type(),
+        )
+        .qualifying();
         let mut starts = BTreeMap::<(u32, u32), UtcMillis>::new();
         let mut laps = Vec::new();
         let mut stints = Vec::new();
@@ -122,6 +131,17 @@ impl ConditionsArchive {
                         }
                     }
                     Channel::RaceControl => {
+                        if qualifying
+                            && let Some(at) = time(row, "date")
+                            && let Some(value) = capabilities::PhaseUpdate::from_record(row)
+                        {
+                            archive.phases.push(Reading::new(
+                                at,
+                                Availability::Estimated(at),
+                                retrieved,
+                                Some(value),
+                            )?);
+                        }
                         if let (Some(at), Some(control)) = (time(row, "date"), parse_control(row)) {
                             archive.control.push(Reading::new(
                                 at,
