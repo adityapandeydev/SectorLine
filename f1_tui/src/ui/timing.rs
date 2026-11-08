@@ -38,10 +38,31 @@ pub(super) fn render(
         .style(app.theme.title()),
         heading,
     );
-    frame.render_widget(
-        Paragraph::new("Ty S/M/H/I/W | L=completed | ~stale").style(app.theme.text()),
-        legend,
-    );
+    let race = generated
+        || app
+            .prepared_recording
+            .as_ref()
+            .is_some_and(|r| r.context().race_fields());
+    let legend_text = if race {
+        "Ty S/M/H/I/W | L=completed | ~stale".into()
+    } else if let Some(r) = &app.prepared_recording {
+        if r.context().qualifying() {
+            r.phase()
+                .part
+                .map(|n| {
+                    format!(
+                        "{} best | * provisional | L# completed",
+                        r.context().part_label(n)
+                    )
+                })
+                .unwrap_or_else(|| "Partial: phase -- | best withheld".into())
+        } else {
+            "Best(s) | * provisional | L# completed".into()
+        }
+    } else {
+        String::new()
+    };
+    frame.render_widget(Paragraph::new(legend_text).style(app.theme.text()), legend);
     let wide = area.width >= 80;
     let column = |title, width, right, field| Column {
         title,
@@ -51,18 +72,27 @@ pub(super) fn render(
     };
     let mut columns = vec![
         column("", 1, false, |_| ""),
-        column("Pos", 3, true, |r| &r.position),
-        column("Driver", if wide { 12 } else { 8 }, false, |r| &r.driver),
+        column(if race { "Pos" } else { "Rpt" }, 3, true, |r| &r.position),
+        column(
+            "Driver",
+            if wide { if race { 12 } else { 10 } } else { 8 },
+            false,
+            |r| &r.driver,
+        ),
         column("Tm", 3, false, |r| &r.team),
-        column("Gap(s)", 7, true, |r| &r.gap),
+        if race {
+            column("Gap(s)", 7, true, |r| &r.gap)
+        } else {
+            column("Best(s)", 9, true, |r| &r.best)
+        },
     ];
-    if wide {
+    if wide && race {
         columns.push(column("Int(s)", 8, true, |r| &r.interval));
     }
     columns.extend([
-        column("Ty", 3, false, |r| &r.tyre),
+        column("Ty", if !wide && !race { 2 } else { 3 }, false, |r| &r.tyre),
         column("Age", 3, true, |r| &r.tyre_age),
-        column("Lap", 3, true, |r| &r.lap),
+        column(if race { "Lap" } else { "L#" }, 3, true, |r| &r.lap),
     ]);
     if wide {
         columns.extend([
@@ -71,7 +101,9 @@ pub(super) fn render(
             column("AgeS", 5, true, |r| &r.sample_age),
         ]);
     }
-    columns.push(column("State", 5, false, |r| &r.status));
+    columns.push(column("State", if race { 5 } else { 4 }, false, |r| {
+        &r.status
+    }));
     let header = Row::new(columns.iter().map(|c| {
         Cell::from(Line::raw(c.title).alignment(if c.right {
             Alignment::Right

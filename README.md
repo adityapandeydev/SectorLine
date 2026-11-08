@@ -429,3 +429,18 @@ The failure modes are deliberate: the final `RESTORED` marker must say
 Ctrl-C input byte). These probes change terminal modes; run them in a separate
 test terminal. Windows ConPTY resize, quit, Ctrl-C, Ctrl-Break and restoration
 checks passed locally. Native Linux/macOS smoke verification remains pending.
+
+Qualifying and sprint qualifying show the reported Q1/Q2/Q3 or SQ1/SQ2/SQ3 part
+and a best completed non-pit-out lap scoped to that part. A part needs an explicit
+start message and a usable lap-start link; missing evidence withholds the best.
+A lap started before a reported chequered close may finish afterward. `*` marks
+unknown eligibility: it is provisional, not an official classified result.
+Practice shows a session best. `Rpt` preserves the last provider-reported position;
+it is not a new ranking calculated from these bests. Non-race tables omit race
+gaps and show `L#` as the completed lap number, without a race lap total.
+
+`sched` is catalogue session-duration metadata. `observed` is the replay UTC cursor;
+the elapsed/span above it belongs to the recording, including any pre-session
+coverage. There is no inferred countdown, elimination, or final classification.
+Missing session/phase/telemetry evidence is labelled partial; unknown session kinds
+never silently select the race layout.

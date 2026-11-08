@@ -182,7 +182,7 @@ fn catalogue_roundtrip_permits_offline_selection() {
     );
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(
-        text.contains("102") && text.contains("Qualifying") && text.contains("not implemented"),
+        text.contains("102") && text.contains("Qualifying") && text.contains("--prepare-session"),
         "{text}"
     );
     assert!(!text.contains("Loading generated demo"));

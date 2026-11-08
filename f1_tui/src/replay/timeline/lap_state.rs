@@ -9,6 +9,45 @@ pub(super) struct LapFields {
     pub(super) sectors: [Observation<Seconds>; 3],
 }
 impl SessionState {
+    pub(crate) fn best_in_scope(
+        &self,
+        timeline: &Timeline,
+        driver: NonZeroU32,
+        eligible_only: bool,
+        accept: impl Fn(u32, UtcMillis) -> bool,
+    ) -> Option<timing::LapTiming> {
+        if !Arc::ptr_eq(&self.token, &timeline.token) {
+            return None;
+        }
+        self.laps
+            .range((driver, 0)..=(driver, u32::MAX))
+            .filter_map(|(key, i)| {
+                let event = &timeline.events[*i];
+                let Payload::Lap(lap) = &event.payload else {
+                    return None;
+                };
+                let eligibility =
+                    eligibility(lap, self.decisions.get(key).map(|i| &timeline.events[*i]));
+                if event.ambiguous
+                    || !accept(lap.number.get(), event.observed)
+                    || (eligible_only && eligibility != timing::Eligibility::Eligible)
+                    || lap.best(eligibility).is_none()
+                {
+                    return None;
+                }
+                let mut lap = lap.as_ref().clone();
+                lap.eligibility = eligibility;
+                Some(lap)
+            })
+            .min_by(|a, b| {
+                a.duration
+                    .unwrap()
+                    .get()
+                    .total_cmp(&b.duration.unwrap().get())
+                    .then_with(|| a.number.cmp(&b.number))
+            })
+    }
+
     pub(crate) fn comparable_lap(
         &self,
         timeline: &Timeline,
@@ -41,35 +80,7 @@ impl SessionState {
         timeline: &Timeline,
         driver: NonZeroU32,
     ) -> Option<timing::LapTiming> {
-        if !Arc::ptr_eq(&self.token, &timeline.token) {
-            return None;
-        }
-        self.laps
-            .range((driver, 0)..=(driver, u32::MAX))
-            .filter_map(|(key, index)| {
-                let event = &timeline.events[*index];
-                let Payload::Lap(lap) = &event.payload else {
-                    return None;
-                };
-                if event.ambiguous
-                    || eligibility(lap, self.decisions.get(key).map(|i| &timeline.events[*i]))
-                        != timing::Eligibility::Eligible
-                    || lap.pit_out != Some(false)
-                    || lap.duration.is_none()
-                {
-                    return None;
-                }
-                let mut lap = lap.as_ref().clone();
-                lap.eligibility = timing::Eligibility::Eligible;
-                Some(lap)
-            })
-            .min_by(|a, b| {
-                a.duration
-                    .unwrap()
-                    .get()
-                    .total_cmp(&b.duration.unwrap().get())
-                    .then_with(|| a.number.cmp(&b.number))
-            })
+        self.best_in_scope(timeline, driver, true, |_, _| true)
     }
 
     pub(super) fn completed_laps(

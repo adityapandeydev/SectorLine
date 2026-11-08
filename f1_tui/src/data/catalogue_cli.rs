@@ -74,7 +74,7 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             return Err(reason.into());
         }
         println!(
-            "Selected OpenF1 session {}. Recorded replay loading is not implemented yet; no generated demo was loaded.",
+            "Selected OpenF1 session {}. Open recorded timing with --prepare-session ID; no generated demo was loaded.",
             selection.session.id().key()
         );
     } else if query.year.is_some() || !query.text.trim().is_empty() {

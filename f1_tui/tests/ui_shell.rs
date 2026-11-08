@@ -270,6 +270,12 @@ fn recorded_app() -> App {
     .unwrap()
     .with_conditions(conditions);
     let mut replay = RecordedReplay::new(timeline, "SHELL FIXTURE - synthetic".into()).unwrap();
+    let context = sectorline::domain::capabilities::SessionContext::from_names(
+        replay.timeline().session().clone(),
+        "Race",
+        "Race",
+    );
+    replay = replay.with_context(context).unwrap();
     replay.seek(ElapsedMillis(90_000)).unwrap();
     app.prepared_recording = Some(replay);
     app.theme.color = true;

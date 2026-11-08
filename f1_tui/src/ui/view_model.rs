@@ -14,6 +14,7 @@ pub struct TimingRow {
     pub team: String,
     pub team_name: Option<String>,
     pub team_color: Option<Color>,
+    pub best: String,
     pub gap: String,
     pub interval: String,
     pub tyre: String,
@@ -148,6 +149,7 @@ fn compound(value: Option<&str>) -> String {
 }
 pub fn recorded(replay: &RecordedReplay) -> Vec<TimingRow> {
     let codes = team_codes(replay.timeline().drivers());
+    let bests = replay.timing_bests();
     replay
         .frame()
         .samples()
@@ -203,6 +205,20 @@ pub fn recorded(replay: &RecordedReplay) -> Vec<TimingRow> {
                     .unwrap_or_else(|| "--".into()),
                 team_name: driver.and_then(|d| d.team.clone()),
                 team_color: ansi_color(driver.and_then(|d| d.team_color)),
+                best: bests
+                    .get(&car.driver.number.get())
+                    .map(|b| {
+                        format!(
+                            "{:.3}{}",
+                            b.duration.get(),
+                            if b.eligibility == timing::Eligibility::Unknown {
+                                "*"
+                            } else {
+                                ""
+                            }
+                        )
+                    })
+                    .unwrap_or_else(|| "--".into()),
                 gap: value(&car.gap_to_leader, |g| format_gap(Some(g))),
                 interval: value(&car.gap_to_ahead, |g| format_gap(Some(g))),
                 tyre,
@@ -257,6 +273,7 @@ pub fn demo(stream: &TelemetryStream) -> Vec<TimingRow> {
                     .unwrap_or_else(|| "--".into()),
                 team_name: driver.and_then(|d| d.team.clone()),
                 team_color: ansi_color(driver.and_then(|d| d.team_color)),
+                best: "--".into(),
                 gap: gap(&car.gap_to_leader),
                 interval: gap(&car.gap_to_ahead),
                 tyre: compound(Some(&car.compound)),

@@ -219,6 +219,12 @@ fn app() -> App {
     .with_conditions(conditions);
     let mut replay =
         RecordedReplay::new(timeline, "TIMING FIXTURE - 26 synthetic drivers".into()).unwrap();
+    let context = sectorline::domain::capabilities::SessionContext::from_names(
+        replay.timeline().session().clone(),
+        "Race",
+        "Race",
+    );
+    replay = replay.with_context(context).unwrap();
     replay.seek(ElapsedMillis(90_000)).unwrap();
     let mut app = App::new(
         TelemetryStream::load_from_dir(

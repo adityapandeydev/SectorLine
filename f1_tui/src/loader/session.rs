@@ -127,10 +127,21 @@ fn prepare(
         "{} {} | {} | #{}",
         selection.session.year, selection.meeting.meeting_name, selection.session.session_name, key
     );
+    let mut context = crate::domain::capabilities::SessionContext::from_names(
+        selection.session.id(),
+        &selection.session.session_name,
+        &selection.session.session_type,
+    );
+    if let (Some(start), Some(end)) = (&selection.session.date_start, &selection.session.date_end) {
+        context = context.with_schedule(
+            crate::domain::normalize::utc_millis_ceiling(start)?,
+            crate::domain::normalize::utc_millis_ceiling(end)?,
+        )?;
+    }
     if SessionCache::exists(&config.recording_root, &spec) {
         let cache =
             SessionCache::open_cancellable(&config.recording_root, &spec, cancel, &verifying)?;
-        return normalized(&cache, title, cancel, progress);
+        return normalized(&cache, title, context, cancel, progress);
     }
     progress("Opening resumable download; the previous session stays usable".into());
     let mut writer =
@@ -155,18 +166,20 @@ fn prepare(
         )?;
     cancel.check()?;
     let cache = writer.finish_cancellable(cancel, &verifying)?;
-    normalized(&cache, title, cancel, progress)
+    normalized(&cache, title, context, cancel, progress)
 }
 fn normalized(
     cache: &SessionCache,
     title: String,
+    context: crate::domain::capabilities::SessionContext,
     cancel: &Cancellation,
     progress: &dyn Fn(String),
 ) -> Result<SessionResult> {
     progress("Normalizing recorded observations and ordering timeline".into());
     let replay = RecordedReplay::from_cache(cache, title, cancel, &|n, total| {
         progress(format!("Normalizing recorded data: {n}/{total} chunks"))
-    })?;
+    })?
+    .with_context(context)?;
     cancel.check()?;
     Ok(SessionResult::Recording(Box::new(replay)))
 }

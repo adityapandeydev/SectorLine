@@ -133,8 +133,16 @@ fn summary_lines(replay: &RecordedReplay, car: &CarSample, width: u16) -> Vec<Li
             "Team {}",
             driver.and_then(|d| d.team.as_deref()).unwrap_or("--")
         ),
-        format!("Gap {gap} | Int {interval} (s or +nL)"),
     ];
+    if replay.context().race_fields() {
+        lines.push(format!("Gap {gap} | Int {interval} (s or +nL)"));
+    } else {
+        lines.push(format!(
+            "Reported position {} | age {}",
+            value(&car.position, |v| v.to_string()),
+            age(&car.position, now)
+        ));
+    }
     let speed = format!(
         "Speed {} km/h",
         value(&car.speed_kmh, |v| format!("{:.0}", v.get()))
@@ -198,25 +206,38 @@ fn summary_lines(replay: &RecordedReplay, car: &CarSample, width: u16) -> Vec<Li
     } else {
         lines.extend(sectors);
     }
-    let provisional = car
-        .personal_best
-        .value()
-        .is_some_and(|b| b.eligibility == Eligibility::Unknown);
+    let bests = replay.timing_bests();
+    let personal = bests.get(&replay.selected());
+    let provisional = personal.is_some_and(|b| b.eligibility == Eligibility::Unknown);
+    let qualifier = if replay.context().qualifying() {
+        replay
+            .phase()
+            .part
+            .map(|n| format!("{} best", replay.context().part_label(n)))
+            .unwrap_or_else(|| "Phase best".into())
+    } else {
+        "Best".into()
+    };
     lines.push(format!(
-        "Best {}{}",
-        best(car.personal_best.value()),
+        "{qualifier} {}{}",
+        best(personal),
         if provisional {
             " | Provisional archive best"
         } else {
             ""
         }
     ));
-    let session = replay
-        .frame()
-        .session_best()
+    let session = bests
+        .iter()
+        .min_by(|(da, a), (db, b)| {
+            a.duration
+                .get()
+                .total_cmp(&b.duration.get())
+                .then_with(|| da.cmp(db))
+        })
         .map(|(d, b)| format!("#{d} {}", best(Some(b))))
         .unwrap_or_else(|| "--".into());
-    lines.push(format!("Session {session}"));
+    lines.push(format!("Scope best {session}"));
     let conditions = replay.conditions().drivers.get(&replay.selected());
     let tyre = conditions
         .map(|c| {

@@ -27,6 +27,7 @@ pub struct RecordedReplay {
     conditions: crate::domain::conditions::ConditionsFrame,
     track: crate::track::TrackArchive,
     details: details::DetailsIndex,
+    context: crate::domain::capabilities::SessionContext,
 }
 impl RecordedReplay {
     pub fn from_cache(
@@ -43,6 +44,11 @@ impl RecordedReplay {
             cancel,
         )?;
         replay.track = crate::track::TrackArchive::from_cache(cache, &replay.timeline, cancel)?;
+        replay.context = crate::domain::capabilities::SessionContext::from_names(
+            replay.timeline.session().clone(),
+            cache.spec().session_name(),
+            cache.spec().session_type(),
+        );
         Ok(replay)
     }
     pub fn new(timeline: Timeline, title: String) -> Result<Self> {
@@ -73,6 +79,8 @@ impl RecordedReplay {
             timeline.conditions_at(ElapsedMillis(0), ReplayPolicy::EventTimeEstimates)?;
         let clock = PlaybackClock::new(timeline.end());
         let details = details::DetailsIndex::build(&timeline, cancel)?;
+        let context =
+            crate::domain::capabilities::SessionContext::unknown(timeline.session().clone());
         Ok(Self {
             timeline,
             state,
@@ -86,6 +94,7 @@ impl RecordedReplay {
             offset_ms: 0,
             conditions,
             details,
+            context,
             track: crate::track::TrackArchive::default(),
         })
     }
@@ -107,13 +116,125 @@ impl RecordedReplay {
                 .saturating_add(self.frame.elapsed().0.min(i64::MAX as u64) as i64),
         )
     }
+    pub fn context(&self) -> &crate::domain::capabilities::SessionContext {
+        &self.context
+    }
+    pub fn with_context(
+        mut self,
+        context: crate::domain::capabilities::SessionContext,
+    ) -> Result<Self> {
+        if &context.id != self.timeline.session() {
+            return Err("Session context identity mismatch".into());
+        }
+        if let Some(s) = &context.schedule
+            && !s.end.0.checked_sub(s.start.0).is_some_and(|n| n > 0)
+        {
+            return Err("Invalid context schedule".into());
+        }
+        self.context = context;
+        Ok(self)
+    }
+    pub fn phase(&self) -> crate::domain::capabilities::PhaseProjection {
+        crate::domain::capabilities::PhaseProjection::at(
+            &self.timeline.conditions_archive().phases,
+            self.timeline
+                .origin()
+                .0
+                .saturating_add(self.frame.elapsed().0.min(i64::MAX as u64) as i64),
+        )
+    }
+    fn in_scope(
+        &self,
+        phase: &crate::domain::capabilities::PhaseProjection,
+        driver: u32,
+        lap: u32,
+        end: crate::domain::UtcMillis,
+    ) -> bool {
+        !self.context.qualifying()
+            || phase.part.is_some_and(|n| {
+                self.laps
+                    .start_utc(driver, lap)
+                    .is_some_and(|start| phase.part_for_lap(start.0, end.0) == Some(n))
+            })
+    }
+    pub fn timing_bests(&self) -> std::collections::BTreeMap<u32, crate::domain::timing::BestLap> {
+        let phase = self.phase();
+        self.timeline
+            .drivers()
+            .iter()
+            .filter_map(|d| {
+                let lap =
+                    self.state
+                        .best_in_scope(&self.timeline, d.number, false, |lap, end| {
+                            self.in_scope(&phase, d.number.get(), lap, end)
+                        })?;
+                lap.best(lap.eligibility).map(|best| (d.number.get(), best))
+            })
+            .collect()
+    }
     pub fn comparable_lap(&self) -> Option<crate::domain::timing::LapTiming> {
-        self.state
-            .comparable_lap(&self.timeline, std::num::NonZeroU32::new(self.selected)?)
+        let lap = self
+            .state
+            .comparable_lap(&self.timeline, std::num::NonZeroU32::new(self.selected)?)?;
+        let end = self
+            .frame
+            .samples()
+            .iter()
+            .find(|c| c.driver.number.get() == self.selected)?
+            .lap_time
+            .timing()
+            .observed_at?;
+        self.in_scope(&self.phase(), self.selected, lap.number.get(), end)
+            .then_some(lap)
     }
     pub fn eligible_reference(&self) -> Option<crate::domain::timing::LapTiming> {
-        self.state
-            .eligible_reference(&self.timeline, std::num::NonZeroU32::new(self.selected)?)
+        if !self.context.qualifying() {
+            return self
+                .state
+                .eligible_reference(&self.timeline, std::num::NonZeroU32::new(self.selected)?);
+        }
+        let phase = self.phase();
+        self.state.best_in_scope(
+            &self.timeline,
+            std::num::NonZeroU32::new(self.selected)?,
+            true,
+            |lap, end| self.in_scope(&phase, self.selected, lap, end),
+        )
+    }
+    pub fn session_notice(&self) -> String {
+        let mut missing = Vec::new();
+        if matches!(self.context.kind, crate::domain::SessionKind::Unknown(_)) {
+            missing.push("session kind --");
+        }
+        let phase = self.phase();
+        if self.context.qualifying() && phase.part.is_none() {
+            missing.push("phase --");
+        } else if self.context.qualifying() && !phase.has_current_start() {
+            missing.push("phase start -- (best withheld)");
+        }
+        if !self.frame.samples().iter().any(|c| {
+            c.speed_kmh.value().is_some()
+                || c.rpm.value().is_some()
+                || c.gear.value().is_some()
+                || c.throttle.value().is_some()
+                || c.brake.value().is_some()
+                || c.drs.value().is_some()
+        }) {
+            missing.push("telemetry -- (no admitted values)");
+        }
+        if !self
+            .frame
+            .samples()
+            .iter()
+            .any(|c| c.lap_number.value().is_some())
+        {
+            missing.push("completed laps --");
+        }
+        if missing.is_empty() {
+            "Observed timing | * provisional eligibility | positions from provider".into()
+        } else {
+            format!("Partial: {}", missing.join(" | "))
+        }
     }
     pub fn with_track_laps(mut self, laps: Vec<crate::track::LapWindow>) -> Result<Self> {
         self.track =

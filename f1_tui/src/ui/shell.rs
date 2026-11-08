@@ -135,7 +135,39 @@ pub(super) fn render(frame: &mut Frame, app: &App, r: &layout::Regions) {
         )
         .map(|v| v.format("%H:%M:%S%.3f UTC").to_string())
         .unwrap_or_else(|| "UTC --".into());
-        format!("Observation timeline | {utc} | Left/Right 1s | PgUp/PgDn 60s")
+        if replay.context().race_fields() && replay.context().schedule.is_none() {
+            format!("Observation timeline | {utc} | Left/Right 1s | PgUp/PgDn 60s")
+        } else {
+            let schedule = replay
+                .context()
+                .schedule
+                .as_ref()
+                .map(|s| clock(s.end.0.saturating_sub(s.start.0) as u64))
+                .unwrap_or_else(|| "--".into());
+            let phase = if replay.context().qualifying() {
+                replay
+                    .phase()
+                    .part
+                    .map(|n| {
+                        format!(
+                            " | {} {}",
+                            replay.context().part_label(n),
+                            if replay.phase().closed {
+                                "closed"
+                            } else {
+                                "reported"
+                            }
+                        )
+                    })
+                    .unwrap_or_else(|| " | phase --".into())
+            } else {
+                String::new()
+            };
+            format!(
+                "{}{phase} | sched {schedule} | observed {utc}",
+                replay.context().label()
+            )
+        }
     } else {
         "Generated timeline | Simulated data and movement".into()
     };
@@ -162,6 +194,15 @@ pub(super) fn render(frame: &mut Frame, app: &App, r: &layout::Regions) {
                 "Generated demo | Values are simulated, not observed race data".into()
             }
         });
+    let message = if app.load_id.is_none()
+        && !app.load_error
+        && let Some(replay) = &app.prepared_recording
+        && !replay.context().race_fields()
+    {
+        replay.session_notice()
+    } else {
+        message
+    };
     frame.render_widget(
         Paragraph::new(message).style(if app.load_error {
             app.theme.warning()
@@ -224,7 +265,7 @@ pub(super) fn navigation(frame: &mut Frame, app: &App, area: Rect) {
 }
 pub(super) fn help_text(app: &App) -> String {
     format!(
-        "Playback\nSpace play/pause | Home restart paused\n1/2/5/0 speed: 1x / 2x / 5x / 10x\nLeft/Right seek 1s | PgUp/PgDn seek 60s (recorded)\n\nViews\nTab / Shift+Tab switch views | Up/Down or j/k select driver\n[ / ] scroll Driver, Conditions or event evidence\nEvents: Up/Down (j/k) reports; PgUp/PgDn 10 reports; Enter seeks availability\nEvents only expose reports already available; newest row follows latest\nDriver: typed values, sample age, eligible same-lap comparisons\nHistory: last10s admitted samples, points only; no connecting lines\ng go to time/lap/recording offset (recorded)\ns sessions | r retry last load | Esc cancel load/back\nq quit | Ctrl+C always quits\n--ascii or SECTORLINE_ASCII uses plain text maps, plots and borders\n--no-color or NO_COLOR disables the semantic palette\n\nSource and quality\n-- unavailable | ~ stale held value | ... column overflow | * provisional best\n\nTiming columns\nGap/Int in seconds; +nL means laps behind\nTy S/M/H/I/W soft/medium/hard/intermediate/wet; ? unrecognized\nAge tyre laps | Lap completed laps | Last seconds\nkm/h speed | AgeS telemetry observation age in seconds\nTm source team mnemonic; full name in Driver and Team key\nState RET/DNF/DNS/DSQ only when evidenced\nRecorded: event-time estimates; original delivery times unknown\nDemo: Generated simulation; no observed replay\nTrack: static observed lap trace from this recording; approximate XY\nCars use a 500ms display delay; interpolation endpoints already available\n~ held sample; missing or >2s old locations are hidden\nPit/unknown laps and gaps/jumps never interpolate\nTrack view: ,/. rotate 15deg; -/+ adjust cell height/width (default2)\n\nFull status\n{}\n\nEsc closes help; playback stays paused. Up/Down scroll.",
+        "Playback\nSpace play/pause | Home restart paused\n1/2/5/0 speed: 1x / 2x / 5x / 10x\nLeft/Right seek 1s | PgUp/PgDn seek 60s (recorded)\n\nViews\nTab / Shift+Tab switch views | Up/Down or j/k select driver\n[ / ] scroll Driver, Conditions or event evidence\nEvents: Up/Down (j/k) reports; PgUp/PgDn 10 reports; Enter seeks availability\nEvents only expose reports already available; newest row follows latest\nDriver: typed values, sample age, eligible same-lap comparisons\nHistory: last10s admitted samples, points only; no connecting lines\ng go to time/lap/recording offset (recorded)\ns sessions | r retry last load | Esc cancel load/back\nq quit | Ctrl+C always quits\n--ascii or SECTORLINE_ASCII uses plain text maps, plots and borders\n--no-color or NO_COLOR disables the semantic palette\n\nSource and quality\n-- unavailable | ~ stale held value | ... column overflow | * provisional best\n\nTiming columns\nRace/Sprint: Gap/Int in seconds; +nL means laps behind\nQualifying/practice: Best(s), last completed L#; no race gaps/totals\nRpt is last provider position; phase best never creates a rank\n* bests are provisional if original eligibility is incomplete\nQualifying best uses the reported part and evidenced part boundaries\nSchedule is catalogue metadata, never an actual countdown\nObserved timeline zero remains the first core observation\nTy S/M/H/I/W soft/medium/hard/intermediate/wet; ? unrecognized\nAge tyre laps | Lap completed laps | Last seconds\nkm/h speed | AgeS telemetry observation age in seconds\nTm source team mnemonic; full name in Driver and Team key\nState RET/DNF/DNS/DSQ only when evidenced\nRecorded: event-time estimates; original delivery times unknown\nDemo: Generated simulation; no observed replay\nTrack: static observed lap trace from this recording; approximate XY\nCars use a 500ms display delay; interpolation endpoints already available\n~ held sample; missing or >2s old locations are hidden\nPit/unknown laps and gaps/jumps never interpolate\nTrack view: ,/. rotate 15deg; -/+ adjust cell height/width (default2)\n\nFull status\n{}\n\nEsc closes help; playback stays paused. Up/Down scroll.",
         app.load_message.as_deref().unwrap_or("Ready")
     )
 }

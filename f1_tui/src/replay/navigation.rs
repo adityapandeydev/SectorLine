@@ -52,6 +52,9 @@ impl LapIndex {
         }
         Ok(index)
     }
+    pub fn start_utc(&self, driver: u32, lap: u32) -> Option<UtcMillis> {
+        self.0.get(&(driver, lap)).copied().flatten()
+    }
     pub fn target(
         &self,
         driver: u32,
