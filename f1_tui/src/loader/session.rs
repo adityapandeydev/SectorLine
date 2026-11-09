@@ -139,9 +139,10 @@ fn prepare(
         )?;
     }
     if SessionCache::exists(&config.recording_root, &spec) {
-        let cache =
-            SessionCache::open_cancellable(&config.recording_root, &spec, cancel, &verifying)?;
-        return normalized(&cache, title, context, cancel, progress);
+        let replay =
+            RecordedReplay::open_cache(&config.recording_root, &spec, title, cancel, &verifying)?
+                .with_context(context)?;
+        return Ok(SessionResult::Recording(Box::new(replay)));
     }
     progress("Opening resumable download; the previous session stays usable".into());
     let mut writer =

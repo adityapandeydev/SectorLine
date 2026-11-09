@@ -183,12 +183,48 @@ impl SessionCache {
         Self::load_cancellable(directory.clone(), expected, true, cancel, progress)
             .map_err(|e| format!("Cannot open recording {}: {e}", directory.display()).into())
     }
+    /// Visit each chunk only after checksum, identity, schema and field validation.
+    /// The completed cache is returned only after every chunk succeeds. Visitors
+    /// must keep provisional derived state private until this call returns Ok.
+    pub fn open_visited(
+        root: &Path,
+        expected: &CacheSpec,
+        cancel: &Cancellation,
+        progress: &dyn Fn(usize, usize),
+        visitor: &mut dyn FnMut(&Self, &ValidatedChunk) -> Result<()>,
+    ) -> Result<Self> {
+        Self::load_visited(
+            root.join(expected.stem()),
+            expected,
+            true,
+            cancel,
+            progress,
+            visitor,
+        )
+    }
     fn load_cancellable(
         directory: PathBuf,
         expected: &CacheSpec,
         complete: bool,
         cancel: &Cancellation,
         progress: &dyn Fn(usize, usize),
+    ) -> Result<Self> {
+        Self::load_visited(
+            directory,
+            expected,
+            complete,
+            cancel,
+            progress,
+            &mut |_, _| Ok(()),
+        )
+    }
+    fn load_visited(
+        directory: PathBuf,
+        expected: &CacheSpec,
+        complete: bool,
+        cancel: &Cancellation,
+        progress: &dyn Fn(usize, usize),
+        visitor: &mut dyn FnMut(&Self, &ValidatedChunk) -> Result<()>,
     ) -> Result<Self> {
         cancel.check()?;
         reject_link(&directory)?;
@@ -209,6 +245,7 @@ impl SessionCache {
             if i == 0 {
                 cache.drivers = roster(&chunk)?;
             }
+            visitor(&cache, &chunk)?;
             progress(i + 1, cache.chunk_count());
         }
         cancel.check()?;

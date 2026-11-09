@@ -325,3 +325,83 @@ fn cache_process_exit_releases_lock_and_keeps_committed_data() {
     append(&mut writer, 2);
     writer.finish().unwrap();
 }
+
+#[test]
+fn cache_verified_visit_streams_validated_chunks_and_rejects_late_corruption() {
+    use sectorline::data::limits::Cancellation;
+    let root = Temp::new("visit");
+    let spec = spec();
+    let mut writer = CacheWriter::begin(&root.0, &spec).unwrap();
+    for i in 0..3 {
+        append(&mut writer, i);
+    }
+    writer.finish().unwrap();
+    let mut seen = Vec::new();
+    let cache = SessionCache::open_visited(
+        &root.0,
+        &spec,
+        &Cancellation::default(),
+        &|_, _| {},
+        &mut |cache, chunk| {
+            assert_eq!(cache.chunk_count(), 3);
+            seen.push(chunk.channel());
+            if chunk.channel() == Channel::CarData {
+                assert!(chunk.records()[0]["throttle"].is_null());
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        seen,
+        vec![Channel::Drivers, Channel::CarData, Channel::CarData]
+    );
+    let old = sectorline::replay::RecordedReplay::from_cache(
+        &cache,
+        "REFERENCE".into(),
+        &Cancellation::default(),
+        &|_, _| {},
+    )
+    .unwrap();
+    let mut streamed = sectorline::replay::RecordedReplay::open_cache(
+        &root.0,
+        &spec,
+        "STREAMED".into(),
+        &Cancellation::default(),
+        &|_, _| {},
+    )
+    .unwrap();
+    streamed.seek(old.timeline().end()).unwrap();
+    let reference = old
+        .timeline()
+        .state_at(
+            old.timeline().end(),
+            sectorline::replay::timeline::ReplayPolicy::EventTimeEstimates,
+        )
+        .unwrap()
+        .frame(old.timeline())
+        .unwrap();
+    assert_eq!(
+        serde_json::to_vec(streamed.frame()).unwrap(),
+        serde_json::to_vec(&reference).unwrap()
+    );
+    std::fs::write(cache.directory().join("000002.json"), b"[]").unwrap();
+    assert!(
+        sectorline::replay::RecordedReplay::open_cache(
+            &root.0,
+            &spec,
+            "CORRUPT".into(),
+            &Cancellation::default(),
+            &|_, _| {}
+        )
+        .is_err()
+    );
+    let cancel = Cancellation::default();
+    cancel.cancel();
+    assert!(
+        SessionCache::open_visited(&root.0, &spec, &cancel, &|_, _| {}, &mut |_, _| panic!(
+            "Must cancel before visiting"
+        ))
+        .is_err()
+    );
+}

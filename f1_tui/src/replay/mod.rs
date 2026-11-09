@@ -37,13 +37,41 @@ impl RecordedReplay {
         cancel: &Cancellation,
         progress: &dyn Fn(usize, usize),
     ) -> Result<Self> {
-        let laps = navigation::LapIndex::from_cache(cache, cancel)?;
-        let mut replay = Self::with_navigation(
+        Self::from_timeline_cache(
+            cache,
             Timeline::from_cache(cache, cancel, progress)?,
             title,
-            laps,
             cancel,
-        )?;
+        )
+    }
+    pub fn open_cache(
+        root: &std::path::Path,
+        spec: &crate::data::cache::CacheSpec,
+        title: String,
+        cancel: &Cancellation,
+        progress: &dyn Fn(usize, usize),
+    ) -> Result<Self> {
+        let mut builder = None;
+        let cache =
+            SessionCache::open_visited(root, spec, cancel, progress, &mut |cache, chunk| {
+                if builder.is_none() {
+                    builder = Some(timeline::ingest::CoreBuilder::new(cache)?);
+                }
+                builder.as_mut().ok_or("Missing core builder")?.visit(chunk)
+            })?;
+        let timeline = builder
+            .ok_or("Recording has no chunks")?
+            .finish(&cache, cancel)?;
+        Self::from_timeline_cache(&cache, timeline, title, cancel)
+    }
+    fn from_timeline_cache(
+        cache: &SessionCache,
+        timeline: Timeline,
+        title: String,
+        cancel: &Cancellation,
+    ) -> Result<Self> {
+        let laps = navigation::LapIndex::from_cache(cache, cancel)?;
+        let mut replay = Self::with_navigation(timeline, title, laps, cancel)?;
         replay.track = crate::track::TrackArchive::from_cache(cache, &replay.timeline, cancel)?;
         replay.context = crate::domain::capabilities::SessionContext::from_names(
             replay.timeline.session().clone(),

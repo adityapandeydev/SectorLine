@@ -10,6 +10,7 @@ use crate::{
         *,
     },
 };
+pub(crate) mod ingest;
 mod lap_state;
 use std::sync::Arc;
 use std::{cmp::Ordering, collections::BTreeMap, num::NonZeroU32};
@@ -151,77 +152,18 @@ impl Timeline {
         cancel: &Cancellation,
         progress: &dyn Fn(usize, usize),
     ) -> Result<Self> {
-        let channels = [
-            Channel::Position,
-            Channel::CarData,
-            Channel::Location,
-            Channel::Intervals,
-            Channel::Laps,
-            Channel::RaceControl,
-        ];
-        let count = cache.record_count(&channels);
-        let event_bytes = count
-            .checked_mul(std::mem::size_of::<Event>())
-            .ok_or("Timeline size overflow")?;
-        if event_bytes > 192 * 1024 * 1024 {
-            return Err("Recorded core timeline exceeds the 192 MiB event budget; request a shorter coverage window".into());
-        }
-        let mut events = Vec::new();
-        events
-            .try_reserve_exact(count)
-            .map_err(|_| "Cannot allocate the recorded timeline within available memory")?;
-        let mut sources = Vec::new();
-        let mut drivers = Vec::new();
-        let mut control = Vec::new();
-        for index in 0..cache.chunk_count() {
+        let mut builder = ingest::CoreBuilder::new(cache)?;
+        for i in 0..cache.chunk_count() {
             cancel.check()?;
-            let meta = cache.chunk_metadata(index)?;
-            if meta.channel == Channel::Drivers {
-                drivers = normalize::roster(&cache.read_chunk(index)?)?;
-            } else if channels.contains(&meta.channel) && meta.status == 200 {
-                let chunk = cache.read_chunk(index)?;
-                let source = sources.len().try_into()?;
-                sources.push(chunk.metadata());
-                if meta.channel == Channel::RaceControl {
-                    control.push((source, chunk));
-                } else {
-                    normalize::append(&chunk, source, &mut events)?;
-                }
+            let meta = cache.chunk_metadata(i)?;
+            if meta.channel == Channel::Drivers
+                || (ingest::CHANNELS.contains(&meta.channel) && meta.status == 200)
+            {
+                builder.visit(&cache.read_chunk(i)?)?;
             }
-            progress(index + 1, cache.chunk_count());
+            progress(i + 1, cache.chunk_count());
         }
-        for (source, chunk) in control {
-            cancel.check()?;
-            normalize::append_control(&chunk, source, &drivers, &mut events)?;
-        }
-        cancel.check()?;
-        let origin = events
-            .iter()
-            .filter(|e| {
-                matches!(
-                    e.payload,
-                    Payload::Position(_)
-                        | Payload::Telemetry(_)
-                        | Payload::Location(_)
-                        | Payload::Intervals { .. }
-                )
-            })
-            .map(|e| e.observed)
-            .min()
-            .ok_or("Recording has no timestamped core observations")?;
-        let mut timeline = Self::new(
-            SessionId::new(
-                Provider::OpenF1,
-                cache.spec().request()?.session_key().to_string(),
-            )?,
-            origin,
-            drivers,
-            sources,
-            events,
-        )?;
-        timeline.conditions = conditions::ConditionsArchive::from_cache(cache, cancel)?;
-        cancel.check()?;
-        Ok(timeline)
+        builder.finish(cache, cancel)
     }
     pub fn with_conditions(mut self, archive: conditions::ConditionsArchive) -> Self {
         self.conditions = archive;
