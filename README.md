@@ -469,3 +469,20 @@ cursor advances; current interval freshness is a separate rule.
 
 At most one description of each kind is shown for the selected driver. Repeated
 redraws do not queue notices, and seeking rebuilds context from available evidence.
+
+### Replay performance checks
+
+Run `cargo bench --locked -p sectorline --bench replay -- --manifest PATH --frames 1800`
+with a completed recording manifest. It measures validated load, 100 checked seeks,
+and update/render work at 144x44 across five views. `--legacy` measures the former
+verify-then-normalize path. `--synthetic-capacity` instead generates a temporary
+raw-on-disk two-hour, 22-driver workload and measures it in a fresh child process.
+Explicit recording failures exit nonzero; benchmarks never substitute demo results.
+
+On the i7-12700H Windows reference machine, three paired Monza cache runs reduced
+median load from 4.84s to 2.28s. The two-second warm-start target remains unmet.
+Frame work, seeks, the declared synthetic capacity case and paused CPU were within
+their budgets. TestBackend timings and ConPTY first-output traces do not establish
+visible terminal latency. A three-hour native run completed 180 session-switch
+cycles with a 169 MiB peak working set and near-flat final-hour memory usage; no
+sustained unbounded growth was observed in that workload.
