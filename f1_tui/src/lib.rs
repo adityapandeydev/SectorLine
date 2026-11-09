@@ -1,6 +1,7 @@
 pub mod app;
 pub mod data;
 pub mod domain;
+pub mod insights;
 pub mod live;
 pub mod loader;
 pub mod models;

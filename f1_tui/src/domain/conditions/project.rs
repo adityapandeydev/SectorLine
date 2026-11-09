@@ -14,7 +14,7 @@ fn availability(available: Availability) -> i64 {
         Availability::Unknown => i64::MAX,
     }
 }
-fn latest<T: PartialEq>(
+pub(crate) fn latest<T: PartialEq>(
     rows: &[Reading<T>],
     now: UtcMillis,
     estimates: bool,

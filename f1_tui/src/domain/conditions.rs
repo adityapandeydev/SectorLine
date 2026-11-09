@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod archive;
 mod project;
 pub use archive::parse_control;
+pub(crate) use project::latest;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Reading<T> {
     pub at: UtcMillis,

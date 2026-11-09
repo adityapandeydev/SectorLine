@@ -28,6 +28,7 @@ pub struct RecordedReplay {
     track: crate::track::TrackArchive,
     details: details::DetailsIndex,
     context: crate::domain::capabilities::SessionContext,
+    insights: crate::insights::Index,
 }
 impl RecordedReplay {
     pub fn from_cache(
@@ -79,6 +80,7 @@ impl RecordedReplay {
             timeline.conditions_at(ElapsedMillis(0), ReplayPolicy::EventTimeEstimates)?;
         let clock = PlaybackClock::new(timeline.end());
         let details = details::DetailsIndex::build(&timeline, cancel)?;
+        let insights = crate::insights::Index::build(&timeline, cancel)?;
         let context =
             crate::domain::capabilities::SessionContext::unknown(timeline.session().clone());
         Ok(Self {
@@ -94,6 +96,7 @@ impl RecordedReplay {
             offset_ms: 0,
             conditions,
             details,
+            insights,
             context,
             track: crate::track::TrackArchive::default(),
         })
@@ -157,17 +160,38 @@ impl RecordedReplay {
                     .is_some_and(|start| phase.part_for_lap(start.0, end.0) == Some(n))
             })
     }
+    pub fn insights(&self) -> Vec<crate::insights::Insight> {
+        self.insights_with_policy(crate::insights::Policy::default())
+    }
+    pub fn insights_with_policy(
+        &self,
+        policy: crate::insights::Policy,
+    ) -> Vec<crate::insights::Insight> {
+        self.insights.at(self, policy)
+    }
+    pub fn eligible_bests(
+        &self,
+    ) -> std::collections::BTreeMap<u32, crate::domain::timing::BestLap> {
+        self.bests(true)
+    }
     pub fn timing_bests(&self) -> std::collections::BTreeMap<u32, crate::domain::timing::BestLap> {
+        self.bests(false)
+    }
+    fn bests(
+        &self,
+        eligible_only: bool,
+    ) -> std::collections::BTreeMap<u32, crate::domain::timing::BestLap> {
         let phase = self.phase();
         self.timeline
             .drivers()
             .iter()
             .filter_map(|d| {
-                let lap =
-                    self.state
-                        .best_in_scope(&self.timeline, d.number, false, |lap, end| {
-                            self.in_scope(&phase, d.number.get(), lap, end)
-                        })?;
+                let lap = self.state.best_in_scope(
+                    &self.timeline,
+                    d.number,
+                    eligible_only,
+                    |lap, end| self.in_scope(&phase, d.number.get(), lap, end),
+                )?;
                 lap.best(lap.eligibility).map(|best| (d.number.get(), best))
             })
             .collect()
