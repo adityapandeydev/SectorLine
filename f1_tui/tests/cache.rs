@@ -405,3 +405,29 @@ fn cache_verified_visit_streams_validated_chunks_and_rejects_late_corruption() {
         .is_err()
     );
 }
+
+#[test]
+fn cache_streamed_open_rejects_forged_counts_before_reserving_events() {
+    let root = Temp::new("streamed-count");
+    let spec = spec();
+    let mut writer = CacheWriter::begin(&root.0, &spec).unwrap();
+    for i in 0..3 {
+        append(&mut writer, i);
+    }
+    let cache = writer.finish().unwrap();
+    let path = cache.directory().join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    manifest["entries"][1]["records"] = serde_json::json!(usize::MAX);
+    std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    assert!(
+        sectorline::replay::RecordedReplay::open_cache(
+            &root.0,
+            &spec,
+            "BAD COUNTS".into(),
+            &sectorline::data::limits::Cancellation::default(),
+            &|_, _| {}
+        )
+        .is_err()
+    );
+}

@@ -1,7 +1,8 @@
 //! Immutable completed recordings and a journal for resumable partial acquisition.
 use super::limits::Cancellation;
 use super::openf1::{
-    AcquisitionRequest, Channel, ChunkMetadata, ChunkStore, Result, ValidatedChunk, Window,
+    ARCHIVE_ROW_LIMIT, AcquisitionRequest, Channel, ChunkMetadata, ChunkStore, Result,
+    ValidatedChunk, Window,
 };
 use crate::domain::UtcMillis;
 use serde::{Deserialize, Serialize};
@@ -144,6 +145,9 @@ impl Manifest {
             return Err("Recording cache coverage is incomplete or invalid".into());
         }
         for (entry, (channel, window)) in self.entries.iter().zip(plan) {
+            if entry.records > ARCHIVE_ROW_LIMIT {
+                return Err("Recording chunk row count exceeds the archive limit".into());
+            }
             let m = &entry.metadata;
             if m.channel != channel
                 || m.window != window

@@ -16,6 +16,7 @@ use std::{
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+pub(crate) const ARCHIVE_ROW_LIMIT: usize = 100_000;
 const ENDPOINT: &str = "https://api.openf1.org/v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -265,7 +266,7 @@ impl ValidatedChunk {
         } else {
             serde_json::from_slice(&raw)?
         };
-        if records.len() > 100_000 {
+        if records.len() > ARCHIVE_ROW_LIMIT {
             return Err("Archived chunk exceeds size/row limit".into());
         }
         let issues =
