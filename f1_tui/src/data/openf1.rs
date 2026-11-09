@@ -514,7 +514,7 @@ impl OpenF1Client {
             let mut raw = Vec::new();
             let mut buffer = [0; 8192];
             let mut reader = response.into_reader();
-            let mut read_failed = false;
+            let mut read_error = None;
             loop {
                 cancel.check()?;
                 match reader.read(&mut buffer) {
@@ -525,21 +525,27 @@ impl OpenF1Client {
                         }
                         raw.extend_from_slice(&buffer[..n]);
                     }
-                    Err(_) => {
-                        read_failed = true;
+                    Err(error) => {
+                        read_error = Some(error.kind());
                         break;
                     }
                 }
             }
             cancel.check()?;
-            if read_failed {
-                self.retry(attempt, None, cancel)?;
+            if let Some(kind) = read_error {
+                self.retry(attempt, None, cancel).map_err(|e| {
+                    format!(
+                        "{} response read interrupted ({kind:?}): {e}",
+                        channel.endpoint()
+                    )
+                })?;
                 continue;
             }
             let mut records: Vec<Value> = if status == 404 {
                 vec![]
             } else {
-                serde_json::from_slice(&raw)?
+                serde_json::from_slice(&raw)
+                    .map_err(|e| format!("{} JSON decoding failed: {e}", channel.endpoint()))?
             };
             if records.len() > self.limits.max_rows {
                 return Err("Response row limit exceeded; use smaller chunks".into());
