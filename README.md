@@ -444,3 +444,28 @@ the elapsed/span above it belongs to the recording, including any pre-session
 coverage. There is no inferred countdown, elimination, or final classification.
 Missing session/phase/telemetry evidence is labelled partial; unknown session kinds
 never silently select the race layout.
+
+
+### Contextual insights
+
+In a recording, open Driver or Events and use `[` / `]` to scroll to Context.
+Context describes the selected driver at the current replay cursor, independently
+of the report selected in Events. Every insight shows its evidence window,
+availability timestamp and rule explanation.
+
+Race/sprint leader-gap changes need at least three usable reports spanning five
+seconds, with no sample gap over ten seconds and a latest report at most ten
+seconds old. The default observation window is 30s; the Rust `insights::Policy`
+API accepts 10-120s. Reported intervals ahead at most 1s get a separate description.
+Missing, conflicting and lapped values suppress gap calculations.
+
+Position changes retain their reported meaning; their cause stays unestablished.
+Pit/stint notices use reports at most 60s old and preserve unknown entry/exit or
+change times. Eligible bests use admitted completed laps and explicit eligibility;
+provisional archive bests remain excluded. Their recording minimum covers the
+admitted recording, rather than asserting an official session result. Qualifying
+bests stay within the evidenced part. Historical best facts remain valid as the
+cursor advances; current interval freshness is a separate rule.
+
+At most one description of each kind is shown for the selected driver. Repeated
+redraws do not queue notices, and seeking rebuilds context from available evidence.

@@ -299,6 +299,12 @@ fn summary_lines(replay: &RecordedReplay, car: &CarSample, width: u16) -> Vec<Li
         lines.push("-- eligible comparable lap/reference unavailable".into());
     }
     lines.push("* Provisional archive best; excluded from comparisons.".into());
+    lines.push(String::new());
+    lines.extend(
+        super::events::context_text(replay)
+            .lines()
+            .map(str::to_owned),
+    );
     lines.into_iter().map(Line::raw).collect()
 }
 fn history_lines(

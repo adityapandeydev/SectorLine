@@ -413,3 +413,318 @@ fn insights_never_bridge_long_gaps_or_claim_a_trend_from_a_burst() {
         assert!(!r.insights().iter().any(|i| i.kind == InsightKind::GapTrend));
     }
 }
+
+fn showcase() -> RecordedReplay {
+    use sectorline::domain::{
+        conditions::{ConditionsArchive, Reading},
+        stints::{PitRecord, Stint},
+        timing::Eligibility,
+    };
+    let c = ConditionsArchive {
+        pits: std::collections::BTreeMap::from([(
+            4,
+            vec![
+                Reading::new(
+                    UtcMillis(59000),
+                    Availability::Estimated(UtcMillis(61000)),
+                    UtcMillis(900000),
+                    Some(PitRecord {
+                        lap: Some(1),
+                        lane_seconds: Some(25.0),
+                        stop_seconds: None,
+                    }),
+                )
+                .unwrap(),
+            ],
+        )]),
+        stints: std::collections::BTreeMap::from([(
+            4,
+            vec![
+                Reading::new(
+                    UtcMillis(60000),
+                    Availability::Estimated(UtcMillis(61000)),
+                    UtcMillis(900000),
+                    Some(Stint {
+                        number: 2,
+                        lap_start: 2,
+                        compound: Some("HARD".into()),
+                        age_at_start: Some(0),
+                    }),
+                )
+                .unwrap(),
+            ],
+        )]),
+        ..Default::default()
+    };
+    let mut r = recording(
+        vec![
+            interval(50000, 50000, Some(5.0), gap(1.2)),
+            interval(55000, 55000, Some(4.5), gap(1.1)),
+            interval(60000, 60000, Some(4.0), gap(0.7)),
+            position(50000, 5),
+            position(60000, 4),
+            position(80000, 4),
+            lap(60000, 1, 60.0, Eligibility::Eligible, false),
+        ],
+        c,
+    );
+    r.seek(ElapsedMillis(61000)).unwrap();
+    r
+}
+fn app(r: RecordedReplay) -> sectorline::App {
+    let mut a = sectorline::App::new(
+        sectorline::TelemetryStream::load_from_dir(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../python_bridge/cache"),
+        )
+        .unwrap(),
+        false,
+    );
+    a.prepared_recording = Some(r);
+    a
+}
+fn capture(a: &sectorline::App, w: u16, h: u16) -> (String, ratatui::buffer::Buffer) {
+    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(w, h)).unwrap();
+    t.draw(|f| a.render(f)).unwrap();
+    let b = t.backend().buffer().clone();
+    let s = b
+        .content()
+        .chunks(w as usize)
+        .map(|row| row.iter().map(|c| c.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+    (s, b)
+}
+#[test]
+fn insights_ui_exposes_windows_availability_and_rules_at_all_sizes() {
+    for view in [sectorline::ui::View::Driver, sectorline::ui::View::Events] {
+        let mut a = app(showcase());
+        a.view = view;
+        for (w, h) in [(144, 44), (120, 36), (80, 24)] {
+            let mut all = String::new();
+            let mut saved = false;
+            for offset in (0..160).step_by(1) {
+                a.panel_scroll = offset;
+                let (text, buffer) = capture(&a, w, h);
+                if !saved
+                    && text.contains("Context | driver #4")
+                    && text.contains("Reported leader gap")
+                    && text.contains("Evidence window")
+                    && text.contains("Available known")
+                {
+                    if let Some(root) = std::env::var_os("SECTORLINE_CAPTURE_DIR") {
+                        let view = if view == sectorline::ui::View::Driver {
+                            "driver"
+                        } else {
+                            "events"
+                        };
+                        let size = match w {
+                            144 => "wide",
+                            120 => "standard",
+                            _ => "compact",
+                        };
+                        let cells=buffer.content().iter().map(|c|serde_json::json!({"s":c.symbol(),"fg":format!("{:?}",c.fg),"bg":format!("{:?}",c.bg),"m":format!("{:?}",c.modifier)})).collect::<Vec<_>>();
+                        std::fs::write(std::path::Path::new(&root).join(format!("t19-{view}-{size}.json")),serde_json::to_vec(&serde_json::json!({"width":w,"height":h,"cells":cells,"fixture":"synthetic","scroll_rows":offset})).unwrap()).unwrap();
+                    }
+                    saved = true;
+                }
+                all.push_str(&text);
+            }
+            assert!(
+                saved,
+                "Context heading and first rule must be reachable together"
+            );
+            assert!(all.contains("Context | driver #4"), "{view:?} {w}x{h}");
+            assert!(all.contains("Reported interval ahead"));
+            assert!(all.contains("Evidence window"));
+            assert!(all.contains("Available estimated"));
+            assert!(all.contains("cause unestablished"));
+            assert!(!all.contains("win chance"));
+        }
+    }
+}
+
+#[test]
+fn insights_conflicting_or_invalid_condition_reports_withhold_a_notice() {
+    use sectorline::domain::{
+        conditions::{ConditionsArchive, Reading},
+        stints::Stint,
+    };
+    let a = Reading::new(
+        UtcMillis(0),
+        Availability::Known(UtcMillis(0)),
+        UtcMillis(900000),
+        Some(Stint {
+            number: 1,
+            lap_start: 1,
+            compound: Some("SOFT".into()),
+            age_at_start: Some(0),
+        }),
+    )
+    .unwrap();
+    let mut b = a.clone();
+    b.value.as_mut().unwrap().compound = Some("HARD".into());
+    let c = ConditionsArchive {
+        stints: std::collections::BTreeMap::from([(4, vec![a.clone(), b])]),
+        ..Default::default()
+    };
+    assert!(recording(vec![position(0, 4)], c).insights().is_empty());
+    let invalid = Reading::new(
+        UtcMillis(1000),
+        Availability::Known(UtcMillis(1000)),
+        UtcMillis(900000),
+        None,
+    )
+    .unwrap();
+    let c = ConditionsArchive {
+        stints: std::collections::BTreeMap::from([(4, vec![a, invalid])]),
+        ..Default::default()
+    };
+    let mut r = recording(vec![position(0, 4), position(1000, 4)], c);
+    r.seek(ElapsedMillis(1000)).unwrap();
+    assert!(r.insights().is_empty());
+}
+#[test]
+fn insights_events_can_show_context_when_there_are_no_parsed_reports() {
+    let mut r = race(vec![
+        interval(0, 0, Some(5.0), None),
+        interval(5000, 5000, Some(4.5), None),
+        interval(10000, 10000, Some(4.0), gap(0.5)),
+    ]);
+    r.seek(ElapsedMillis(10000)).unwrap();
+    assert!(r.visible_events().is_empty());
+    let mut a = app(r);
+    a.view = sectorline::ui::View::Events;
+    let text = capture(&a, 80, 24).0;
+    assert!(text.contains("Evidence timeline | 0 available"));
+    assert!(text.contains("Context | driver #4"));
+    assert!(text.contains("Reported leader gap"));
+}
+
+#[test]
+fn insights_recording_minimum_respects_availability_and_driver_selection() {
+    use sectorline::domain::timing::{Eligibility, LapTiming};
+    let other = Event::new(
+        16,
+        UtcMillis(60000),
+        Availability::Estimated(UtcMillis(65000)),
+        2,
+        Payload::Lap(Box::new(LapTiming {
+            number: std::num::NonZeroU32::new(1).unwrap(),
+            duration: Some(Seconds::new(59.0).unwrap()),
+            sectors: [None; 3],
+            pit_out: Some(false),
+            eligibility: Eligibility::Eligible,
+        })),
+    )
+    .unwrap();
+    let t = Timeline::new(
+        session(),
+        UtcMillis(0),
+        vec![
+            RosterDriver::new(4, "TST", "SYNTHETIC4").unwrap(),
+            RosterDriver::new(16, "OTH", "SYNTHETIC16").unwrap(),
+        ],
+        vec![
+            source(Channel::Intervals, 900000),
+            source(Channel::Position, 900000),
+            source(Channel::Laps, 900000),
+        ],
+        vec![lap(60000, 1, 60.0, Eligibility::Eligible, false), other],
+    )
+    .unwrap();
+    let mut r = RecordedReplay::new(t, "SYNTHETIC MULTI-DRIVER FIXTURE".into()).unwrap();
+    r.seek(ElapsedMillis(64999)).unwrap();
+    let before = r.insights();
+    assert!(before.iter().any(|i| i.evidence.contains("#4 60.000s")));
+    r.seek(ElapsedMillis(65000)).unwrap();
+    assert!(
+        r.insights()
+            .iter()
+            .any(|i| i.evidence.contains("#16 59.000s"))
+    );
+    r.select(1);
+    assert_eq!(r.selected(), 16);
+    assert!(
+        r.insights()
+            .iter()
+            .all(|i| i.driver == 16 && i.summary.contains("59.000s"))
+    );
+    r.select(-1);
+    r.seek(ElapsedMillis(64999)).unwrap();
+    assert_eq!(r.insights(), before);
+}
+#[test]
+fn insights_qualifying_best_does_not_survive_a_part_change() {
+    use sectorline::domain::{
+        capabilities::{PhaseBoundary, PhaseUpdate},
+        conditions::{ConditionsArchive, Reading},
+        timing::Eligibility,
+    };
+    let phases = [(0, 1), (70000, 2)]
+        .map(|(at, part)| {
+            Reading::new(
+                UtcMillis(at),
+                Availability::Estimated(UtcMillis(at)),
+                UtcMillis(900000),
+                Some(PhaseUpdate {
+                    part: Some(part),
+                    boundary: PhaseBoundary::Start,
+                }),
+            )
+            .unwrap()
+        })
+        .to_vec();
+    let t = Timeline::new(
+        session(),
+        UtcMillis(0),
+        vec![RosterDriver::new(4, "TST", "SYNTHETIC4").unwrap()],
+        vec![
+            source(Channel::Intervals, 900000),
+            source(Channel::Position, 900000),
+            source(Channel::Laps, 900000),
+        ],
+        vec![
+            lap(60000, 1, 60.0, Eligibility::Eligible, false),
+            lap(140000, 2, 69.0, Eligibility::Eligible, false),
+        ],
+    )
+    .unwrap()
+    .with_conditions(ConditionsArchive {
+        phases,
+        ..Default::default()
+    });
+    let mut starts = sectorline::replay::navigation::LapIndex::default();
+    starts.insert(4, 1, UtcMillis(0));
+    starts.insert(4, 2, UtcMillis(71000));
+    let mut r = RecordedReplay::with_navigation(
+        t,
+        "SYNTHETIC QUALIFYING INSIGHT FIXTURE".into(),
+        starts,
+        &Cancellation::default(),
+    )
+    .unwrap()
+    .with_context(SessionContext::from_names(
+        session(),
+        "Qualifying",
+        "Qualifying",
+    ))
+    .unwrap();
+    for (at, expected) in [
+        (60000, Some("Q1: 60.000s")),
+        (70000, None),
+        (140000, Some("Q2: 69.000s")),
+        (60000, Some("Q1: 60.000s")),
+    ] {
+        r.seek(ElapsedMillis(at)).unwrap();
+        let rows = r.insights();
+        let best = rows.iter().find(|i| i.kind == InsightKind::EligibleBest);
+        assert_eq!(best.is_some(), expected.is_some());
+        if let Some(s) = expected {
+            assert!(best.unwrap().summary.contains(s));
+            assert!(matches!(
+                best.unwrap().available,
+                Availability::Estimated(_)
+            ));
+        }
+    }
+}

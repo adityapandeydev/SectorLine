@@ -24,6 +24,34 @@ pub(super) fn timestamp(time: UtcMillis) -> String {
         .map(|t| t.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string())
         .unwrap_or_else(|| "--".into())
 }
+/// Context belongs to the current selected driver/cursor, independently of the report selection.
+pub(super) fn context_text(replay: &RecordedReplay) -> String {
+    let rows = replay.insights();
+    let mut lines = vec![format!(
+        "Context | driver #{} | replay now",
+        replay.selected()
+    )];
+    if rows.is_empty() {
+        lines.push("-- Insufficient fresh evidence for contextual insights.".into());
+    }
+    for i in rows {
+        lines.push(i.summary);
+        lines.push(format!(
+            "Evidence window {} -> {}",
+            timestamp(i.window_start),
+            timestamp(i.observed)
+        ));
+        let available = match i.available {
+            Availability::Known(t) => format!("known {}", timestamp(t)),
+            Availability::Estimated(t) => format!("estimated {}", timestamp(t)),
+            Availability::Unknown => "--".into(),
+        };
+        lines.push(format!("Available {available}"));
+        lines.push(i.evidence);
+        lines.push(String::new());
+    }
+    lines.join("\n")
+}
 pub(super) fn recorded(frame: &mut Frame, app: &App, replay: &RecordedReplay, area: Rect) {
     let rows = replay.visible_events();
     let [title, help, body] = Layout::vertical([
@@ -38,7 +66,7 @@ pub(super) fn recorded(frame: &mut Frame, app: &App, replay: &RecordedReplay, ar
         title,
     );
     frame.render_widget(
-        Paragraph::new("Parsed reports | Enter seeks availability | Up/Down select")
+        Paragraph::new("Parsed reports | Enter seeks availability | [/] detail & context")
             .style(app.theme.text()),
         help,
     );
@@ -46,8 +74,16 @@ pub(super) fn recorded(frame: &mut Frame, app: &App, replay: &RecordedReplay, ar
         app.event_selection.set(None);
         app.event_offset.set(0);
         frame.render_widget(
-            Paragraph::new("-- No parsed reports available at this replay time.")
+            scroll(
+                Paragraph::new(format!(
+                    "-- No parsed reports available at this replay time.\n\n{}",
+                    context_text(replay)
+                ))
+                .wrap(Wrap { trim: false })
                 .style(app.theme.text()),
+                body,
+                app.panel_scroll,
+            ),
             body,
         );
         return;
@@ -138,6 +174,7 @@ pub(super) fn recorded(frame: &mut Frame, app: &App, replay: &RecordedReplay, ar
         selected + 1,
         rows.len()
     );
+    let text = format!("{text}\n\n{}", context_text(replay));
     frame.render_widget(
         scroll(
             Paragraph::new(text)

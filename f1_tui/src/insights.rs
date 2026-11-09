@@ -178,7 +178,14 @@ impl Index {
             if let Payload::Intervals { ahead, .. } = &last.payload
                 && let Some(n) = seconds(ahead).filter(|s| *s <= 1.0)
             {
-                push(InsightKind::NearbyInterval,last.observed,last.observed,last.available,format!("Reported interval ahead {n:.3}s"),"intervals | <=1.000s rule; report age <=10s; no physical proximity or battle inferred".into());
+                push(
+                    InsightKind::NearbyInterval,
+                    last.observed,
+                    last.observed,
+                    last.available,
+                    format!("Reported interval ahead {n:.3}s"),
+                    "intervals | reported interval <=1.000s; latest report <=10s old".into(),
+                );
             }
             let valid=intervals.iter().all(|e|!e.ambiguous && matches!(&e.payload,Payload::Intervals{leader,..} if seconds(leader).is_some()));
             if valid && intervals.len() >= 3 {
@@ -207,7 +214,7 @@ impl Index {
                         availability,
                         format!("Reported leader gap {a:.3} -> {b:.3}s ({:+.3}s)", b - a),
                         format!(
-                            "intervals | {} reports / {:.3}s; endpoint change, not a forecast or cause; max sample gap10s",
+                            "intervals | {} reports / {:.3}s; endpoint change; sample gaps <=10s; latest report <=10s old",
                             intervals.len(),
                             span as f64 / 1000.0
                         ),
@@ -233,7 +240,7 @@ impl Index {
                 if !prior.ambiguous
                     && let Payload::Position(Some(before)) = prior.payload
                 {
-                    push(InsightKind::PositionChange,prior.observed,changed.observed,merge(prior.available,changed.available),format!("Reported position {before} -> {current}"),"position | cause unestablished; pit visits, retirements and corrections can change classification; not an overtake claim".into());
+                    push(InsightKind::PositionChange,prior.observed,changed.observed,merge(prior.available,changed.available),format!("Reported position {before} -> {current}"),"position | cause unestablished; pits, retirements and corrections can change classification".into());
                 }
             }
         }
@@ -252,7 +259,7 @@ impl Index {
                         .map(|n| n.to_string())
                         .unwrap_or_else(|| "--".into())
                 ),
-                "pit | report within60s; entry/exit phase and position-change cause unknown".into(),
+                "pit | report age <=60s; entry/exit phase unknown".into(),
             );
         }
         if let Some((row, stint)) =
@@ -269,7 +276,7 @@ impl Index {
                 row.available,
                 format!("Stint {} reported: {compound}", stint.number),
                 format!(
-                    "stints | anchored to observed lap{}; report within60s; no inferred pit stop or tyre-change instant",
+                    "stints | observed lap{} anchor; report age <=60s; tyre-change instant unknown",
                     stint.lap_start
                 ),
             );
