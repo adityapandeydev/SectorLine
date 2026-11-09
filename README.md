@@ -486,3 +486,18 @@ their budgets. TestBackend timings and ConPTY first-output traces do not establi
 visible terminal latency. A three-hour native run completed 180 session-switch
 cycles with a 169 MiB peak working set and near-flat final-hour memory usage; no
 sustained unbounded growth was observed in that workload.
+
+
+### Fault verification
+
+Provider, archive and replay regressions are available in `provider_faults`,
+`cache_faults` and `replay_invariants`. They use localhost fault responses and
+attributed sparse historical excerpts, plus labelled synthetic ordering cases.
+Failed loads retain the previous playable recording and show a diagnostic;
+corrupt completed caches are rejected without automatic repair. Interrupted
+responses and invalid JSON name the affected channel and failure cause.
+
+Run `cargo test --release --workspace --all-targets --locked --offline -- --test-threads=1`
+for the optimized suite. Tests use no external provider network access; Windows
+fixtures need localhost sockets and temporary junction creation. The suite does
+not certify provider completeness or untested platform behavior.

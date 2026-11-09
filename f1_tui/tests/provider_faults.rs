@@ -145,6 +145,7 @@ fn provider_faults_keep_previous_recording_and_expose_reasons() {
                     Err(e) => panic!("{e}"),
                 }
             };
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(1)))
                 .unwrap();
