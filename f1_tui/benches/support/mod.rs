@@ -7,7 +7,10 @@ use sectorline::{
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{hint::black_box, time::Instant};
+use std::{
+    hint::black_box,
+    time::{Duration, Instant},
+};
 pub fn hash(raw: &[u8]) -> String {
     format!("{:x}", Sha256::digest(raw))
 }
@@ -58,6 +61,14 @@ pub fn measure(
             serde_json::to_vec(&reference)?,
             "Seek/reference mismatch at {target}"
         );
+        let conditions = r
+            .timeline()
+            .conditions_at(ElapsedMillis(target), ReplayPolicy::EventTimeEstimates)?;
+        assert_eq!(
+            serde_json::to_vec(r.conditions())?,
+            serde_json::to_vec(&conditions)?,
+            "Seek/conditions mismatch at {target}"
+        );
     }
     let mut app = App::new(
         TelemetryStream::load_from_dir(
@@ -68,6 +79,7 @@ pub fn measure(
     );
     let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(144, 44))?;
     let mut views = serde_json::Map::new();
+    let mut now = Duration::ZERO;
     for view in [
         View::Timing,
         View::Driver,
@@ -84,12 +96,20 @@ pub fn measure(
             let per = (count / 6).max(1);
             if i % per == 0 {
                 let base = (end.saturating_sub(per as u64 * 33)) * (i / per).min(5) as u64 / 5;
+                r.pause()?;
                 r.seek(ElapsedMillis(base))?;
+                r.toggle()?;
             }
-            let t = Instant::now();
-            r.advance_by(33)?;
-            let prep = t.elapsed().as_secs_f64() * 1000.0;
+            now += Duration::from_millis(33);
             app.prepared_recording = Some(r);
+            let t = Instant::now();
+            app.update_at(now);
+            assert!(
+                !app.load_error,
+                "Replay update failed: {:?}",
+                app.load_message
+            );
+            let prep = t.elapsed().as_secs_f64() * 1000.0;
             let d = Instant::now();
             terminal.draw(|f| app.render(f))?;
             let render = d.elapsed().as_secs_f64() * 1000.0;
