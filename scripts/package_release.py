@@ -58,6 +58,10 @@ def package(target, binary, output, version):
     payload = {
         binary_name: binary.read_bytes(),
         "README.md": (ROOT / "README.md").read_bytes(),
+        "DATA.md": (ROOT / "DATA.md").read_bytes(),
+        "CHANGELOG.md": (ROOT / "CHANGELOG.md").read_bytes(),
+        "LICENSE": (ROOT / "LICENSE").read_bytes(),
+        "THIRD-PARTY-LICENSES.txt": (ROOT / "THIRD-PARTY-LICENSES.txt").read_bytes(),
         "RELEASE-NOTES.md": (ROOT / ".github/RELEASE-NOTES.md").read_bytes(),
         "BUILD-INFO.json": (json.dumps({
             "version": version, "target": target, "source_commit": revision,

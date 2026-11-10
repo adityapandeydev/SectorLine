@@ -8,6 +8,10 @@ signed/notarized and Linux binaries use the runner's glibc baseline.
 Archives bundle a generated DEMO, not race recordings. Historical source data must
 be downloaded separately from OpenF1; no provider credentials are bundled.
 
-Do not publish before the owner chooses a code license and completes the release
-review. Outstanding gates include the two-second warm-start target and visible
-terminal latency. Review CI results, checksums, platform limits and attribution.
+Sector Line code is MIT licensed. LICENSE and THIRD-PARTY-LICENSES.txt accompany
+the executable; DATA.md documents data semantics and rights boundaries. Provider
+data and Formula 1 marks are not relicensed under MIT.
+
+Stable publication remains pending release review. Outstanding gates include the
+two-second warm-start target and visible terminal latency. Review CI results,
+checksums, platform limits and attribution before publishing.
