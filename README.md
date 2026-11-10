@@ -544,3 +544,23 @@ Run `cargo test --release --workspace --all-targets --locked --offline -- --test
 for the optimized suite. Tests use no external provider network access; Windows
 fixtures need localhost sockets and temporary junction creation. The suite does
 not certify provider completeness or untested platform behavior.
+
+
+### CI and draft archives
+
+GitHub Actions checks Windows x86-64, Linux x86-64 (Ubuntu 24.04) and macOS
+Apple Silicon: formatting, warning-free Clippy, offline Rust fixtures, Python
+tests, optimized builds and an unpacked-binary smoke check. No race-data download
+or provider credentials are used. Linux/macOS archives are explicitly experimental
+until interactive terminal, resize and restoration checks pass on native machines.
+
+Run the **Draft release** workflow manually to get Actions artifacts (14-day
+retention); this does not create a tag or publish a release. Each native archive
+contains the executable, README, release notes and build provenance, with a SHA-256
+sidecar. The unpack test starts the embedded demo outside the checkout with an
+empty PATH and fresh profile. Python is build tooling, not a runtime requirement.
+
+A pushed `v<package-version>` tag runs all checks before creating an **unpublished
+draft**. Tags must match `f1_tui/Cargo.toml`; public publication requires owner
+review. The code licence, remaining performance gates and platform validation
+remain open. See the bundled release notes before sharing builds.

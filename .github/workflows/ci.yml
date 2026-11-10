@@ -1,0 +1,57 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+jobs:
+  quality:
+    name: Check ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Toolchain evidence
+        run: rustc -Vv
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Strict lint
+        run: cargo clippy --release --workspace --all-targets --target ${{ matrix.target }} --locked -- -D warnings
+      - name: Offline fixture tests
+        run: cargo test --release --workspace --all-targets --target ${{ matrix.target }} --locked --offline -- --test-threads=1
+      - name: Optional bridge tests
+        run: python -m unittest discover -s python_bridge -p "test_*.py"
+      - name: Release tooling tests
+        run: python -m unittest discover -s scripts -p "test_*.py"
+      - name: Release binary
+        run: cargo build --release --locked --target ${{ matrix.target }} -p sectorline
+      - name: Package and unpack smoke
+        run: python scripts/package_release.py --target ${{ matrix.target }} --output target/ci-package
