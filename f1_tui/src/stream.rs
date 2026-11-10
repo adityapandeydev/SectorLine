@@ -86,7 +86,10 @@ impl TelemetryStream {
         drivers: Vec<Driver>,
         frames: Vec<TelemetryFrame>,
     ) -> Self {
-        let first_code = drivers.first().map(|d| d.code.clone()).unwrap_or_else(|| "RUS".into());
+        let first_code = drivers
+            .first()
+            .map(|d| d.code.clone())
+            .unwrap_or_else(|| "RUS".into());
         Self {
             session,
             track,
@@ -151,7 +154,10 @@ impl TelemetryStream {
     /// Returns the active telemetry data for the currently selected driver.
     pub fn selected_car(&self) -> Option<&CarTelemetry> {
         let frame = self.current_frame();
-        frame.cars.iter().find(|c| c.driver == self.selected_driver_code)
+        frame
+            .cars
+            .iter()
+            .find(|c| c.driver == self.selected_driver_code)
     }
 
     pub fn driver_info(&self, code: &str) -> Option<&Driver> {
@@ -161,7 +167,11 @@ impl TelemetryStream {
     /// Move driver selection down the leaderboard.
     pub fn select_next_driver(&mut self) {
         let frame = self.current_frame();
-        if let Some(pos) = frame.cars.iter().position(|c| c.driver == self.selected_driver_code) {
+        if let Some(pos) = frame
+            .cars
+            .iter()
+            .position(|c| c.driver == self.selected_driver_code)
+        {
             let next_pos = (pos + 1) % frame.cars.len();
             self.selected_driver_code = frame.cars[next_pos].driver.clone();
         }
@@ -170,8 +180,16 @@ impl TelemetryStream {
     /// Move driver selection up the leaderboard.
     pub fn select_prev_driver(&mut self) {
         let frame = self.current_frame();
-        if let Some(pos) = frame.cars.iter().position(|c| c.driver == self.selected_driver_code) {
-            let prev_pos = if pos == 0 { frame.cars.len() - 1 } else { pos - 1 };
+        if let Some(pos) = frame
+            .cars
+            .iter()
+            .position(|c| c.driver == self.selected_driver_code)
+        {
+            let prev_pos = if pos == 0 {
+                frame.cars.len() - 1
+            } else {
+                pos - 1
+            };
             self.selected_driver_code = frame.cars[prev_pos].driver.clone();
         }
     }
@@ -183,8 +201,8 @@ mod tests {
 
     #[test]
     fn test_stream_playback_controls() {
-        let cache_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../python_bridge/cache");
+        let cache_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../python_bridge/cache");
 
         let mut stream = TelemetryStream::load_from_dir(cache_path).expect("Failed to load cache");
         assert_eq!(stream.current_frame_idx, 0);

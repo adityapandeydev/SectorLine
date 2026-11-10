@@ -8,12 +8,12 @@ use std::{
 
 pub mod capabilities;
 pub mod classification;
-pub mod geometry;
 pub mod conditions;
-pub mod quality;
-pub mod stints;
+pub mod geometry;
 mod legacy;
 pub mod normalize;
+pub mod quality;
+pub mod stints;
 pub mod timing;
 pub use legacy::{adapt_legacy_demo, parse_legacy_gap};
 

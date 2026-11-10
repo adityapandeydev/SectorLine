@@ -185,14 +185,16 @@ fn replay(name: &str, kind: &str, telemetry: bool) -> sectorline::replay::Record
             .unwrap(),
         );
     }
-    let mut conditions = ConditionsArchive::default();
-    conditions.phases = vec![
-        phase(0, 100, Some(1), PhaseBoundary::Start),
-        phase(100000, 100000, Some(1), PhaseBoundary::Close),
-        phase(120000, 125000, Some(2), PhaseBoundary::Start),
-        phase(250000, 250000, Some(2), PhaseBoundary::Close),
-        phase(270000, 270000, Some(3), PhaseBoundary::Start),
-    ];
+    let conditions = ConditionsArchive {
+        phases: vec![
+            phase(0, 100, Some(1), PhaseBoundary::Start),
+            phase(100000, 100000, Some(1), PhaseBoundary::Close),
+            phase(120000, 125000, Some(2), PhaseBoundary::Start),
+            phase(250000, 250000, Some(2), PhaseBoundary::Close),
+            phase(270000, 270000, Some(3), PhaseBoundary::Start),
+        ],
+        ..Default::default()
+    };
     let t = Timeline::new(
         session(),
         UtcMillis(0),

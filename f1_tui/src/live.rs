@@ -54,24 +54,22 @@ impl LiveTelemetryClient {
         let session_info_path = cache_dir.join("session_info.json");
         let mut needs_extract = true;
 
-        if session_info_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&session_info_path) {
-                if let Ok(info) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(event) = info.get("event_name").and_then(|v| v.as_str()) {
-                        let ev_lower = event.to_lowercase();
-                        let gp_lower = gp.to_lowercase();
-                        let is_match = ev_lower.contains(&gp_lower)
-                            || (gp_lower == "silverstone" && ev_lower.contains("british"))
-                            || (gp_lower == "british" && ev_lower.contains("silverstone"))
-                            || (gp_lower == "baku" && ev_lower.contains("azerbaijan"))
-                            || (gp_lower == "azerbaijan" && ev_lower.contains("baku"))
-                            || (gp_lower == "spa" && ev_lower.contains("belgian"))
-                            || (gp_lower == "monza" && ev_lower.contains("italian"));
-                        if is_match {
-                            needs_extract = false;
-                        }
-                    }
-                }
+        if session_info_path.exists()
+            && let Ok(content) = std::fs::read_to_string(&session_info_path)
+            && let Ok(info) = serde_json::from_str::<serde_json::Value>(&content)
+            && let Some(event) = info.get("event_name").and_then(|v| v.as_str())
+        {
+            let ev_lower = event.to_lowercase();
+            let gp_lower = gp.to_lowercase();
+            let is_match = ev_lower.contains(&gp_lower)
+                || (gp_lower == "silverstone" && ev_lower.contains("british"))
+                || (gp_lower == "british" && ev_lower.contains("silverstone"))
+                || (gp_lower == "baku" && ev_lower.contains("azerbaijan"))
+                || (gp_lower == "azerbaijan" && ev_lower.contains("baku"))
+                || (gp_lower == "spa" && ev_lower.contains("belgian"))
+                || (gp_lower == "monza" && ev_lower.contains("italian"));
+            if is_match {
+                needs_extract = false;
             }
         }
 

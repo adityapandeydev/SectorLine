@@ -133,14 +133,15 @@ pub struct TelemetryFrame {
 
 pub fn parse_hex_color(hex: &str) -> Color {
     let clean = hex.trim_start_matches('#');
-    if clean.len() == 6 {
-        if let (Ok(r), Ok(g), Ok(b)) = (
+    if clean.len() == 6
+        && clean.is_ascii()
+        && let (Ok(r), Ok(g), Ok(b)) = (
             u8::from_str_radix(&clean[0..2], 16),
             u8::from_str_radix(&clean[2..4], 16),
             u8::from_str_radix(&clean[4..6], 16),
-        ) {
-            return Color::Rgb(r, g, b);
-        }
+        )
+    {
+        return Color::Rgb(r, g, b);
     }
     Color::Cyan
 }
@@ -151,8 +152,9 @@ mod tests {
 
     #[test]
     fn test_hex_color_parser() {
+        assert_eq!(parse_hex_color("\u{20ac}\u{20ac}"), Color::Cyan);
         assert_eq!(parse_hex_color("#FF8000"), Color::Rgb(255, 128, 0)); // McLaren Papaya
-        assert_eq!(parse_hex_color("#E8002D"), Color::Rgb(232, 0, 45));   // Ferrari Red
+        assert_eq!(parse_hex_color("#E8002D"), Color::Rgb(232, 0, 45)); // Ferrari Red
         assert_eq!(parse_hex_color("#27F4D2"), Color::Rgb(39, 244, 210)); // Mercedes Cyan
     }
 }
