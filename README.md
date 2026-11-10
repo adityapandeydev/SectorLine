@@ -1,35 +1,79 @@
 # Sector Line
 
-An experimental Rust terminal race dashboard with a generated demo and an initial
-recorded timing view backed by OpenF1 historical data. Recorded replay uses explicit
-event-time estimates and starts paused. The demo's simulated movement, telemetry,
-gaps and conditions remain clearly labelled DEMO.
+An experimental Rust terminal race dashboard with a bundled generated demo and
+recorded timing backed by OpenF1 historical data. Recorded snapshots use explicit
+event-time estimates and start paused. Simulated movement, telemetry, gaps and
+conditions remain labelled DEMO.
 
-## Run from this directory
+## Standalone use
 
-Rust 1.89 or newer is required.
+The binary runs from any working directory. It needs neither the source checkout
+nor Python, a separate demo cache, or a Sector Line account. Windows standalone
+checks pass; Linux/macOS native verification and release automation remain pending.
+No public release archive is published yet.
+
+Build with Rust 1.89 or newer, then copy the binary wherever you want:
 
 ```powershell
-cargo run --release -p sectorline
-cargo run --release -p sectorline -- --demo
-cargo test --workspace --locked
+cargo build --release --locked -p sectorline
+# Copy target\release\sectorline.exe to a directory of your choice.
+# From that directory:
+.\sectorline.exe
+.\sectorline.exe --demo
+.\sectorline.exe --help
+.\sectorline.exe --paths
+```
+
+With no command, the TUI opens the bundled demo and session selector (minimum
+80x24 cells). `--demo` / `--headless` runs 20 generated frames without a terminal
+and does not create cache files. `--version` prints the binary version.
+
+For a first historical recording, fetch metadata, select an exact completed ID,
+then download and replay it:
+
+```powershell
+.\sectorline.exe --catalogue --refresh --year 2024
+.\sectorline.exe --catalogue --year 2024 --search "Monza Race"
+.\sectorline.exe --download 9590
+.\sectorline.exe --replay 9590
+```
+
+OpenF1 [documents historical access from 2023 onward as free and unauthenticated](https://openf1.org/docs/).
+Availability, pacing and provider failures still apply; a metadata entry does not
+guarantee telemetry coverage. Downloads can take several minutes. Repeating
+`--download ID` resumes partial chunks or validates an existing completed cache.
+`--replay ID` never downloads: it needs both the cached catalogue and completed
+recording. Missing or corrupt caches show an error and are never silently rebuilt.
+
+`--prepare-session ID` opens a cache or downloads in the background. Add `--offline`
+to prohibit acquisition for the entire TUI session, including later selections and
+retries. Bare `--offline` opens the bundled demo/selector with the same restriction.
+Only explicit catalogue `--refresh` and recording download/preparation contact the
+provider. No configuration file is required; flags control behavior.
+
+`--catalogue-cache PATH` and `--recording-root PATH` override storage. Default
+locations are `%LOCALAPPDATA%\sectorline\catalogue.json` and
+`%LOCALAPPDATA%\sectorline\sessions` on Windows; Unix uses
+`$XDG_CACHE_HOME/sectorline` or `~/.cache/sectorline`. `--paths` prints the resolved
+locations without creating them. Recordings stay in that user cache when the
+binary moves; back up the catalogue alongside recordings for portable offline use.
+
+## Developer checks and optional Python bridge
+
+```powershell
+cargo test --release --workspace --all-targets --locked --offline -- --test-threads=1
 python -m unittest discover -s python_bridge -p test_modes.py
 ```
 
-The cached demo runs without Python. Historical extraction through
-`python_bridge/extract.py` requires Python with FastF1, NumPy, and pandas.
+The Python command tests the optional developer bridge; it is not needed by the
+binary. Historical demo generation remains available through
+`python_bridge/extract.py` with Python/FastF1/NumPy/pandas. The binary's former
+`--gp` generation route now directs users to the bridge or native recordings;
+`--year` belongs to `--catalogue` in the standalone CLI.
 
-## Current status
-
-Starting without options opens the cached demo and session catalogue selector. `--demo` (or
-`--headless`) runs 20 generated frames without opening the TUI. Sessions generated
-through `--gp` and `--year` remain demos. Catalogue recordings open the separate
-RECORDED SNAPSHOT view.
-
-**Live access is unavailable.** `--live` and `--gp live` exit with an explanation
-before loading a cache or contacting a provider. The Python bridge also rejects
-live requests, and failed historical extraction cannot fall back to the latest
-OpenF1 session. Recorded maps use validated session-local lap traces; authenticated live ingestion remains future work.
+**Live access is unavailable.** `--live` and `--gp live` fail before loading data or
+contacting a provider. Historical demo generation never produces an observed
+recording. Recorded maps use validated session-local lap traces.
 
 ## Completed-session catalogue
 
@@ -127,8 +171,7 @@ Preparation has a 15-minute job deadline; retry resumes saved chunks. A ready
 recording opens **RECORDED SNAPSHOT / PAUSED**. Space starts/pauses timestamp-driven
 playback; `1`/`2`/`5`/`0` select 1x/2x/5x/10x. Home restarts at the beginning,
 paused. `Left`/`Right` seek one second and `Page Up`/`Page Down` seek 60 seconds, pausing
-playback; Up/Down selects a driver. Opening the session selector pauses playback. The selector's generated option opens the bundled cached demo; legacy
-`--gp` extraction remains a startup CLI path.
+playback; Up/Down selects a driver. Opening the session selector pauses playback. The selector's generated option opens the bundled demo without Python or disk files.
 
 Recorded values use the latest eligible source observation, with its age shown.
 Missing, quarantined and ambiguous values remain `--`; unknown DRS codes stay

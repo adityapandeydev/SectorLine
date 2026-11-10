@@ -260,3 +260,35 @@ fn packaging_native_download_can_be_replayed_without_provider_or_python() {
         std::thread::sleep(Duration::from_millis(1));
     }
 }
+
+#[test]
+fn packaging_explicit_paths_do_not_require_default_profile_directories() {
+    let f = Fresh::new();
+    let binary = f.0.join(
+        std::path::Path::new(env!("CARGO_BIN_EXE_sectorline"))
+            .file_name()
+            .unwrap(),
+    );
+    let output = Command::new(binary)
+        .args([
+            "--paths",
+            "--catalogue-cache",
+            "custom catalogue.json",
+            "--recording-root",
+            "custom recordings",
+        ])
+        .current_dir(&f.0)
+        .env_remove("LOCALAPPDATA")
+        .env_remove("XDG_CACHE_HOME")
+        .env_remove("HOME")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("custom catalogue.json"));
+    assert!(text.contains("custom recordings"));
+}
