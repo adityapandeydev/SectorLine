@@ -17,30 +17,53 @@ pub struct TelemetryStream {
 }
 
 impl TelemetryStream {
+    /// Bundled generated simulation. No runtime filesystem, Python or provider access.
+    pub fn bundled_demo() -> Result<Self, Box<dyn std::error::Error>> {
+        Self::from_json(
+            include_str!("../../python_bridge/cache/session_info.json"),
+            include_str!("../../python_bridge/cache/track_layout.json"),
+            include_str!("../../python_bridge/cache/drivers.json"),
+            include_str!("../../python_bridge/cache/telemetry_stream.json"),
+        )
+    }
     /// Loads generated demo datasets from the specified cache folder.
     pub fn load_from_dir<P: AsRef<Path>>(cache_dir: P) -> Result<Self, Box<dyn std::error::Error>> {
         let dir = cache_dir.as_ref();
 
         let session_raw = fs::read_to_string(dir.join("session_info.json"))?;
-        let session: SessionInfo = serde_json::from_str(&session_raw)?;
 
         let track_raw = fs::read_to_string(dir.join("track_layout.json"))?;
-        let track: TrackLayout = serde_json::from_str(&track_raw)?;
 
         let drivers_raw = fs::read_to_string(dir.join("drivers.json"))?;
-        let drivers: Vec<Driver> = serde_json::from_str(&drivers_raw)?;
 
         let stream_raw = fs::read_to_string(dir.join("telemetry_stream.json"))?;
-        let frames: Vec<TelemetryFrame> = serde_json::from_str(&stream_raw)?;
+        Self::from_json(&session_raw, &track_raw, &drivers_raw, &stream_raw)
+    }
+    fn from_json(
+        session: &str,
+        track: &str,
+        drivers: &str,
+        frames: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let session: SessionInfo = serde_json::from_str(session)?;
+        let track: TrackLayout = serde_json::from_str(track)?;
+        let drivers: Vec<Driver> = serde_json::from_str(drivers)?;
+        let frames: Vec<TelemetryFrame> = serde_json::from_str(frames)?;
 
         if frames.is_empty() {
             return Err("Telemetry stream contains 0 frames".into());
         }
-        if frames.windows(2).any(|pair| pair[0].timestamp_ms >= pair[1].timestamp_ms) {
+        if frames
+            .windows(2)
+            .any(|pair| pair[0].timestamp_ms >= pair[1].timestamp_ms)
+        {
             return Err("Demo timestamps must be strictly increasing".into());
         }
 
-        let first_code = drivers.first().map(|d| d.code.clone()).unwrap_or_else(|| "VER".into());
+        let first_code = drivers
+            .first()
+            .map(|d| d.code.clone())
+            .unwrap_or_else(|| "VER".into());
 
         Ok(Self {
             session,

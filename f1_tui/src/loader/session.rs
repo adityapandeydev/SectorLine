@@ -20,6 +20,7 @@ pub enum SessionRequest {
     Demo,
     Search(String),
     Recording(u32),
+    CachedRecording(u32),
 }
 pub enum SessionResult {
     Demo(Box<TelemetryStream>),
@@ -35,11 +36,44 @@ pub struct WorkerConfig {
     pub job_timeout: Duration,
 }
 pub fn session_loader(config: WorkerConfig) -> Loader<SessionRequest, SessionResult> {
+    session_loader_with_policy(config, false)
+}
+/// Offline policy also applies to subsequent selections/retries, not just initial playback.
+pub fn session_loader_with_policy(
+    config: WorkerConfig,
+    offline: bool,
+) -> Loader<SessionRequest, SessionResult> {
     let mut client = None;
     Loader::new(config.job_timeout, move |request, cancel, progress| {
+        let request = if offline {
+            match request {
+                SessionRequest::Recording(k) => SessionRequest::CachedRecording(k),
+                other => other,
+            }
+        } else {
+            request
+        };
         prepare(&config, request, &cancel, progress, &mut client)
             .map_err(|e| format!("{e}. Retry with r or choose another session with s"))
     })
+}
+/// Synchronous native command path; acquisition is still bounded/resumable and explicitly requested.
+pub fn prepare_recording(
+    config: &WorkerConfig,
+    key: u32,
+    offline: bool,
+    cancel: &Cancellation,
+    progress: &dyn Fn(String),
+) -> Result<RecordedReplay> {
+    let request = if offline {
+        SessionRequest::CachedRecording(key)
+    } else {
+        SessionRequest::Recording(key)
+    };
+    match prepare(config, request, cancel, progress, &mut None)? {
+        SessionResult::Recording(r) => Ok(*r),
+        _ => Err("Expected a recorded session".into()),
+    }
 }
 fn prepare(
     config: &WorkerConfig,
@@ -51,7 +85,12 @@ fn prepare(
     cancel.check()?;
     if matches!(request, SessionRequest::Demo) {
         progress("Opening cached generated demo".into());
-        let stream = TelemetryStream::load_from_dir(&config.demo_dir).map_err(|e| e.to_string())?;
+        let stream = if config.demo_dir.as_os_str().is_empty() {
+            TelemetryStream::bundled_demo()
+        } else {
+            TelemetryStream::load_from_dir(&config.demo_dir)
+        }
+        .map_err(|e| e.to_string())?;
         cancel.check()?;
         return Ok(SessionResult::Demo(Box::new(stream)));
     }
@@ -105,8 +144,10 @@ fn prepare(
             .collect();
         return Ok(SessionResult::Search(options));
     }
-    let SessionRequest::Recording(key) = request else {
-        unreachable!()
+    let (key, offline) = match request {
+        SessionRequest::Recording(k) => (k, false),
+        SessionRequest::CachedRecording(k) => (k, true),
+        _ => unreachable!(),
     };
     let selection = catalogue.select(key, now).map_err(|e| e.to_string())?;
     let request = AcquisitionRequest::from_selection(&selection)?;
@@ -143,6 +184,9 @@ fn prepare(
             RecordedReplay::open_cache(&config.recording_root, &spec, title, cancel, &verifying)?
                 .with_context(context)?;
         return Ok(SessionResult::Recording(Box::new(replay)));
+    }
+    if offline {
+        return Err(format!("Offline: completed recording {key} is not cached. Download it explicitly with --download {key}" ).into());
     }
     progress("Opening resumable download; the previous session stays usable".into());
     let mut writer =
