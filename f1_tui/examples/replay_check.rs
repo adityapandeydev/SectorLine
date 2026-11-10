@@ -245,7 +245,7 @@ fn verify_completed_laps(cache: &SessionCache, timeline: &Timeline) -> Result<()
         d.timestamp_millis() + i64::from(!d.timestamp_subsec_nanos().is_multiple_of(1_000_000))
     };
     let completion = |r: &Value| -> Option<i64> {
-        let start = r["date_start"].as_str().map(&stamp);
+        let start = r["date_start"].as_str().map(stamp);
         let sectors = (1..=3)
             .map(|i| {
                 r[format!("duration_sector_{i}")]
@@ -270,7 +270,7 @@ fn verify_completed_laps(cache: &SessionCache, timeline: &Timeline) -> Result<()
                     && n["lap_number"].as_u64() == r["lap_number"].as_u64().map(|n| n + 1)
             })
             .and_then(|r| r["date_start"].as_str())
-            .map(&stamp);
+            .map(stamp);
         inferred.into_iter().chain(next).max()
     };
     let origin = timeline.origin().0;
